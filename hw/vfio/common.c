@@ -347,12 +347,9 @@ out:
     rcu_read_unlock();
 }
 
-static void vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
-                                            MemoryRegionSection *section)
+static void vfio_notify_discard_generic(VFIOContainerBase *bcontainer,
+                                        MemoryRegionSection *section)
 {
-    VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
-                                                listener);
-    VFIOContainerBase *bcontainer = vrdl->bcontainer;
     const hwaddr size = int128_get64(section->size);
     const hwaddr iova = section->offset_within_address_space;
     int ret;
@@ -365,12 +362,10 @@ static void vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
     }
 }
 
-static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
-                                            MemoryRegionSection *section)
+static int vfio_notify_populate_generic(VFIOContainerBase *bcontainer,
+                                        MemoryRegionSection *section,
+                                        uint64_t granularity)
 {
-    VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
-                                                listener);
-    VFIOContainerBase *bcontainer = vrdl->bcontainer;
     const hwaddr end = section->offset_within_region +
                        int128_get64(section->size);
     hwaddr start, next, iova;
@@ -382,7 +377,7 @@ static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
      * unmap in minimum granularity later.
      */
     for (start = section->offset_within_region; start < end; start = next) {
-        next = ROUND_UP(start + 1, vrdl->granularity);
+        next = ROUND_UP(start + 1, granularity);
         next = MIN(next, end);
 
         iova = start - section->offset_within_region +
@@ -393,11 +388,29 @@ static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
                                      vaddr, section->readonly);
         if (ret) {
             /* Rollback */
-            vfio_ram_discard_notify_discard(rdl, section);
+            vfio_notify_discard_generic(bcontainer, section);
             return ret;
         }
     }
     return 0;
+}
+
+static void vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
+                                            MemoryRegionSection *section)
+{
+    VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
+                                                listener);
+
+    vfio_notify_discard_generic(vrdl->bcontainer, section);
+}
+
+static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
+                                            MemoryRegionSection *section)
+{
+    VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
+                                                listener);
+
+    return vfio_notify_populate_generic(vrdl->bcontainer, section, vrdl->granularity);
 }
 
 static void vfio_register_ram_discard_listener(VFIOContainerBase *bcontainer,
