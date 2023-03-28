@@ -1366,6 +1366,18 @@ static void vfio_listener_log_sync(MemoryListener *listener,
     }
 }
 
+static void vfio_listener_convert_mem_attr(MemoryListener *listener,
+                                           MemoryRegionSection *section,
+                                           bool shared)
+{
+    VFIOContainerBase *bcontainer = container_of(listener, VFIOContainerBase, listener);
+
+    if (shared)
+        vfio_notify_populate_generic(bcontainer, section, 1ULL << ctz64(bcontainer->pgsizes));
+    else
+        vfio_notify_discard_generic(bcontainer, section);
+}
+
 const MemoryListener vfio_memory_listener = {
     .name = "vfio",
     .region_add = vfio_listener_region_add,
@@ -1373,6 +1385,7 @@ const MemoryListener vfio_memory_listener = {
     .log_global_start = vfio_listener_log_global_start,
     .log_global_stop = vfio_listener_log_global_stop,
     .log_sync = vfio_listener_log_sync,
+    .convert_mem_attr = vfio_listener_convert_mem_attr,
 };
 
 void vfio_reset_handler(void *opaque)
