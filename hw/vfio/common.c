@@ -1374,7 +1374,8 @@ static void vfio_listener_convert_mem_attr(MemoryListener *listener,
     VFIOContainerBase *bcontainer = container_of(listener, VFIOContainerBase, listener);
 
     if (shared)
-        vfio_notify_populate_generic(bcontainer, section, 1ULL << ctz64(bcontainer->pgsizes));
+        vfio_notify_populate_generic(bcontainer, section,
+            1ULL << (63 - clz64(bcontainer->pgsizes)));
     else
         vfio_notify_discard_generic(bcontainer, section);
 }
