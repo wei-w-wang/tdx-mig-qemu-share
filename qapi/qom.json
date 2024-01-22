@@ -919,6 +919,8 @@
 #
 # @debug: Whether it's a debug TD or not (default: 0)
 #
+# @migtd-setup: path to the MigTD setup script
+#
 # Since: 9.0
 ##
 { 'struct': 'TdxGuestProperties',
@@ -927,7 +929,8 @@
             '*mrowner': 'str',
             '*mrownerconfig': 'str',
             '*quote-generation-socket': 'SocketAddress',
-            '*debug': 'bool' } }
+            '*debug': 'bool',
+            '*migtd-setup': 'str' } }
 
 ##
 # @ThreadContextProperties:
