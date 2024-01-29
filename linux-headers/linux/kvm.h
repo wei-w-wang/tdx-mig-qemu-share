@@ -2315,4 +2315,22 @@ struct kvm_create_guest_memfd {
 	__u64 reserved[6];
 };
 
+#define KVM_CGM_PREPARE _IOWR(KVMIO,  0xd5, struct kvm_cgm_prepare)
+
+struct kvm_vm_id {
+#define KVM_VM_ID_TYPE_PID 0
+#define KVM_VM_ID_TYPE_FD 0
+	__u32 type;
+	union {
+		__u32 pid;
+		__u32 vmfd;
+	};
+};
+
+struct kvm_cgm_prepare {
+	__u8 is_src;
+	__u8 pad[7];
+	struct kvm_vm_id vmid;
+};
+
 #endif /* __LINUX_KVM_H */

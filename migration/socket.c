@@ -35,6 +35,11 @@ struct SocketOutgoingArgs {
     SocketAddress *saddr;
 } outgoing_args;
 
+SocketAddress *socket_get_outgoing_addr(void)
+{
+    return outgoing_args.saddr;
+}
+
 void socket_send_channel_create(QIOTaskFunc f, void *data)
 {
     QIOChannelSocket *sioc = qio_channel_socket_new();

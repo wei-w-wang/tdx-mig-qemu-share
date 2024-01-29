@@ -36,6 +36,8 @@
 #include "tdx.h"
 #include "tdx-quote-generator.h"
 #include "../cpu-internal.h"
+#include "migration/migration.h"
+#include "migration/misc.h"
 
 #include "trace.h"
 
@@ -640,12 +642,117 @@ static void tdx_post_init_vcpus(void)
     }
 }
 
+static int tdx_migration_do_prepare(bool is_src)
+{
+    char pgrep_cmd[32] = {0};
+    char migtd_pid_str[32] = {0};
+    pid_t migtd_pid;
+    struct kvm_cgm_prepare prepare;
+    int ret;
+    FILE *cmd_pipe;
+
+    sprintf(pgrep_cmd, "pgrep migtd-%d", kvm_get_vm_pid());
+    cmd_pipe = popen(pgrep_cmd, "r");
+
+    fgets(migtd_pid_str, 32, cmd_pipe);
+    migtd_pid = atoi(migtd_pid_str);
+    ret = pclose(cmd_pipe);
+    if (ret < 0) {
+        error_report("migration prepare: pclose failed %s", strerror(-ret));
+        return -EACCES;
+    }
+
+    prepare.is_src = is_src;
+    prepare.vmid.type = KVM_VM_ID_TYPE_PID;
+    prepare.vmid.pid = migtd_pid;
+
+    return kvm_vm_ioctl(kvm_state, KVM_CGM_PREPARE, &prepare);
+}
+
+static void tdx_migration_prepare(bool is_src)
+{
+    int ret, max_tries = 10;
+
+    do {
+        ret = tdx_migration_do_prepare(is_src);
+        if (ret == -ENOENT) {
+            usleep(10000);
+        }
+        qemu_log("%s: ret=%d, max_tries=%d\n", __func__, ret, max_tries);
+    } while (ret == -ENOENT && max_tries--);
+
+    if (ret < 0) {
+        error_report("migration prepare uAPI failed %s", strerror(-ret));
+    }
+}
+
+static void tdx_run_migtd(char *uri)
+{
+    char migtd_name[17] = {0};
+    char *args[4];
+
+    sprintf(migtd_name, "migtd-%d", kvm_get_vm_pid());
+
+    args[0] = tdx_guest->migtd_setup_path;
+    args[1] = migtd_name;
+    args[2] = uri;
+    args[3] = NULL;
+    execv(tdx_guest->migtd_setup_path, args);
+    _exit(EXIT_SUCCESS);
+}
+
+static void child_cleanup(int sig)
+{
+    int status;
+
+    RETRY_ON_EINTR(waitpid(-1, &status, 0));
+    if (!WIFEXITED(status) || WEXITSTATUS(status)) {
+        error_report("The MigTD process terminated abnormally");
+    }
+}
+
+static void tdx_launch_migration_assistant(void)
+{
+    pid_t pid;
+    SocketAddress saddr;
+
+    signal(SIGCHLD, child_cleanup);
+    migration_get_socket_addr(&saddr);
+
+    pid = fork();
+    if (pid < 0) {
+        error_report("fork failed!\n");
+    }
+
+    if (!pid) {
+        tdx_run_migtd(saddr.u.inet.host);
+    }
+}
+
+static void tdx_migration_state_notifier(Notifier *notifier, void *data)
+{
+    bool is_src = !runstate_check(RUN_STATE_INMIGRATE);
+    int state = is_src ? ((MigrationState *)data)->state :
+                         ((MigrationIncomingState *)data)->state;
+
+    if (state == MIGRATION_STATUS_SETUP) {
+        tdx_launch_migration_assistant();
+    } else if (state == MIGRATION_STATUS_ACTIVE) {
+        tdx_migration_prepare(is_src);
+    }
+}
+
 static void tdx_finalize_vm(Notifier *notifier, void *unused)
 {
     TdxFirmware *tdvf = &tdx_guest->tdvf;
     TdxFirmwareEntry *entry;
     RAMBlock *ram_block;
     int r;
+
+    if (tdx_guest->attributes & TDX_TD_ATTRIBUTES_MIG) {
+        migration_add_notifier(&tdx_guest->migration_state_notifier,
+                               tdx_migration_state_notifier);
+    }
 
     tdx_init_ram_entries();
 
