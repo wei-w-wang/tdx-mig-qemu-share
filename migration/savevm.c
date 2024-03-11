@@ -112,6 +112,7 @@ static struct mig_cmd_args {
     [MIG_CMD_POSTCOPY_RESUME]  = { .len =  0, .name = "POSTCOPY_RESUME" },
     [MIG_CMD_PACKAGED]         = { .len =  4, .name = "PACKAGED" },
     [MIG_CMD_RECV_BITMAP]      = { .len = -1, .name = "RECV_BITMAP" },
+    [MIG_CMD_CGS_MIGRATION_PREPARE] = { .len = -1, .name = "CGS_MIG_PREPARE" },
     [MIG_CMD_MAX]              = { .len = -1, .name = "MAX" },
 };
 
@@ -2434,6 +2435,45 @@ static int loadvm_process_enable_colo(MigrationIncomingState *mis)
     return ret;
 }
 
+static int loadvm_process_cgs_mig_prepare(MigrationIncomingState *mis,
+					  uint16_t len)
+{
+    ConfidentialGuestSupport *cgs = current_machine->cgs;
+    void *buf = cgs_data_channel.buf;
+    uint8_t cont = false;
+    uint16_t cont_len;
+    int ret;
+
+    if (!cgs || !cgs->migration_prepare) {
+        error_report("cgs migration prepare callback not supported");
+        return -EINVAL;
+    }
+
+    ret = qemu_get_buffer(mis->from_src_file, cgs_data_channel.buf, len);
+    if (ret != len) {
+        error_report("CMD_PACKAGED: Buffer receive failed, ret=%d len=%u",
+                     ret, len);
+        return -EIO;
+    }
+
+    do {
+        ret = cgs->migration_prepare(cgs_data_channel.buf, false, &cont);
+        if (ret < 0) {
+            return ret;
+        }
+        if (cgs_data_channel.buf_size > UINT16_MAX) {
+            return -EFBIG;
+	}
+        cont_len = (uint16_t)cgs_data_channel.buf_size;
+	if (cont_len && mis->to_src_file) {
+            qemu_savevm_command_send(mis->to_src_file,
+                                     MIG_CMD_CGS_MIGRATION_PREPARE, len, buf);
+        }
+    } while (cont);
+
+    return 0;
+}
+
 /*
  * Process an incoming 'QEMU_VM_COMMAND'
  * 0           just a normal return
@@ -2532,6 +2572,9 @@ static int loadvm_process_command(QEMUFile *f)
 
     case MIG_CMD_ENABLE_COLO:
         return loadvm_process_enable_colo(mis);
+
+    case MIG_CMD_CGS_MIGRATION_PREPARE:
+	return loadvm_process_cgs_mig_prepare(mis, len);
     }
 
     return 0;
