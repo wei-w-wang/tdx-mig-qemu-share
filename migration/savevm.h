@@ -54,6 +54,7 @@ void qemu_savevm_send_postcopy_run(QEMUFile *f);
 void qemu_savevm_send_postcopy_resume(QEMUFile *f);
 void qemu_savevm_send_recv_bitmap(QEMUFile *f, char *block_name);
 int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f);
+int qemu_savevm_send_cgs_mig_session_start_data(QEMUFile *f);
 
 void qemu_savevm_send_postcopy_ram_discard(QEMUFile *f, const char *name,
                                            uint16_t len,

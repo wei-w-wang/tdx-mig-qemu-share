@@ -2342,4 +2342,11 @@ struct kvm_cgm_prepare {
 	struct kvm_vm_id vmid;
 };
 
+#define KVM_CGM_SESSION_START _IOWR(KVMIO,  0xd6, struct kvm_cgm_data)
+
+struct kvm_cgm_data {
+	__u64 uaddr;
+	__u64 size; /* bytes */
+};
+
 #endif /* __LINUX_KVM_H */

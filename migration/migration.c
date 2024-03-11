@@ -3365,6 +3365,16 @@ static void *migration_thread(void *opaque)
 	goto done;
     }
 
+    /*
+     * The session kickoff data needs to be sent after the preparation is
+     * done (e.g. migration session key has been exchanged and configured).
+     */
+    if (qemu_savevm_send_cgs_mig_session_start_data(s->to_dst_file)) {
+        migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
+                          MIGRATION_STATUS_FAILED);
+	goto done;
+    }
+
     bql_lock();
     qemu_savevm_state_setup(s->to_dst_file);
     bql_unlock();

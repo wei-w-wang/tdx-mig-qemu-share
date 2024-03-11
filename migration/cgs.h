@@ -14,4 +14,6 @@ int cgs_mig_init(void);
 
 void cgs_mig_cleanup(void);
 
+int cgs_mig_session_start(void);
+
 #endif

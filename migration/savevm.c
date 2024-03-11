@@ -93,6 +93,7 @@ enum qemu_vm_cmd {
     MIG_CMD_POSTCOPY_RESUME,   /* resume postcopy on dest */
     MIG_CMD_RECV_BITMAP,       /* Request for recved bitmap on dst */
     MIG_CMD_CGS_MIGRATION_PREPARE, /* Start cgs migration preparation */
+    MIG_CMD_CGS_SESSION_START, /* Start cgs migration session */
     MIG_CMD_MAX
 };
 
@@ -1244,6 +1245,27 @@ int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f)
         }
         qemu_savevm_command_send(f, MIG_CMD_CGS_MIGRATION_PREPARE, len, buf);
     } while (cont);
+
+    return 0;
+}
+
+int qemu_savevm_send_cgs_mig_session_start_data(QEMUFile *f)
+{
+    void *buf = cgs_data_channel.buf;
+    int len;
+
+    if (!current_machine->cgs) {
+        return 0;
+    }
+
+    len = cgs_mig_session_start();
+    if (len < 0) {
+        return len;
+    }
+    if (len > UINT16_MAX) {
+        return -EFBIG;
+    }
+    qemu_savevm_command_send(f, MIG_CMD_CGS_SESSION_START, len, buf);
 
     return 0;
 }
