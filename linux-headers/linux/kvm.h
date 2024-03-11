@@ -2349,4 +2349,18 @@ struct kvm_cgm_data {
 	__u64 size; /* bytes */
 };
 
+
+#define KVM_CGM_GET_MEMORY_STATE _IOWR(KVMIO,  0xd9, struct kvm_cgm_memory_state)
+
+#define KVM_CGM_GFN_NUM_MAX	512
+struct kvm_cgm_memory_state {
+	struct kvm_cgm_data data;
+	__u16 gfn_num;
+	__u8  pad1[6];
+	union {
+		__u64 gfns_uaddr;
+		__u8  pad2[8];
+	};
+};
+
 #endif /* __LINUX_KVM_H */

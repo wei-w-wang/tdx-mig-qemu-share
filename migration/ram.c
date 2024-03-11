@@ -35,6 +35,7 @@
 #include "xbzrle.h"
 #include "ram-compress.h"
 #include "ram.h"
+#include "cgs.h"
 #include "migration.h"
 #include "migration-stats.h"
 #include "migration/register.h"
@@ -92,7 +93,9 @@
 /* 0x80 is reserved in rdma.h for RAM_SAVE_FLAG_HOOK */
 #define RAM_SAVE_FLAG_COMPRESS_PAGE    0x100
 #define RAM_SAVE_FLAG_MULTIFD_FLUSH    0x200
-/* We can't use any flag that is bigger than 0x200 */
+#define RAM_SAVE_FLAG_CGS_STATE        0x400
+
+#define CGS_SAVE_FLAG_MEMORY           0x1
 
 XBZRLECacheStats xbzrle_counters;
 
@@ -503,6 +506,11 @@ static size_t save_page_header(PageSearchStatus *pss, QEMUFile *f,
     }
     qemu_put_be64(f, offset);
     size = 8;
+
+    if (offset & RAM_SAVE_FLAG_CGS_STATE) {
+        qemu_put_be32(f, CGS_SAVE_FLAG_MEMORY);
+	size += 4;
+    }
 
     if (!same_block) {
         len = strlen(block->idstr);
@@ -2069,15 +2077,7 @@ static bool save_compress_page(RAMState *rs, PageSearchStatus *pss,
                                            compress_send_queued_data);
 }
 
-/**
- * ram_save_target_page_legacy: save one target page
- *
- * Returns the number of pages written
- *
- * @rs: current RAM state
- * @pss: data about the page we want to send
- */
-static int ram_save_target_page_legacy(RAMState *rs, PageSearchStatus *pss)
+static int ram_save_target_page_shared(RAMState *rs, PageSearchStatus *pss)
 {
     RAMBlock *block = pss->block;
     ram_addr_t offset = ((ram_addr_t)pss->page) << TARGET_PAGE_BITS;
@@ -2106,6 +2106,55 @@ static int ram_save_target_page_legacy(RAMState *rs, PageSearchStatus *pss)
     }
 
     return ram_save_page(rs, pss);
+}
+
+static void ram_save_cgs_data(PageSearchStatus *pss, uint32_t cgs_flags,
+                              uint32_t data_size)
+{
+    ram_addr_t offset = ((ram_addr_t)pss->page) << TARGET_PAGE_BITS;
+    RAMBlock *block = pss->block;
+    QEMUFile *f = pss->pss_channel;
+
+    ram_transferred_add(save_page_header(pss, f, block,
+                                         offset | RAM_SAVE_FLAG_CGS_STATE));
+
+    qemu_put_be32(f, data_size);
+    qemu_put_buffer(f, cgs_data_channel.buf, data_size);
+
+    ram_transferred_add(data_size + 4);
+}
+
+static int ram_save_target_page_private(PageSearchStatus *pss)
+{
+    int res;
+
+    res = cgs_mig_get_memory_state(pss->cgs_private_gpa, 1);
+    if (res < 0) {
+        return res;
+    }
+
+    ram_save_cgs_data(pss, CGS_SAVE_FLAG_MEMORY, res);
+    stat64_add(&mig_stats.cgs_private_pages, 1);
+
+    /* Return the number of pages (i.e. 1) succeeded to be saved */
+    return 1;
+}
+
+/**
+ * ram_save_target_page_common: save one target shared or private page
+ *
+ * Returns the number of pages written
+ *
+ * @rs: current RAM state
+ * @pss: data about the page we want to send
+ */
+static int ram_save_target_page_common(RAMState *rs, PageSearchStatus *pss)
+{
+    if (pss->cgs_private_gpa != CGS_PRIVATE_GPA_INVALID) {
+        return ram_save_target_page_private(pss);
+    }
+
+    return ram_save_target_page_shared(rs, pss);
 }
 
 /* Should be called before sending a host page */
@@ -3017,7 +3066,7 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
     }
 
     migration_ops = g_malloc0(sizeof(MigrationOps));
-    migration_ops->ram_save_target_page = ram_save_target_page_legacy;
+    migration_ops->ram_save_target_page = ram_save_target_page_common;
 
     bql_unlock();
     ret = multifd_send_sync_main();
