@@ -40,6 +40,7 @@
 static unsigned memory_region_transaction_depth;
 static bool memory_region_update_pending;
 static bool ioeventfd_update_pending;
+static bool ram_force_default_shared;
 unsigned int global_dirty_tracking;
 
 static QTAILQ_HEAD(, MemoryListener) memory_listeners
@@ -1855,15 +1856,21 @@ bool memory_region_has_guest_memfd(MemoryRegion *mr)
     return mr->ram_block && mr->ram_block->guest_memfd >= 0;
 }
 
+void memory_force_default_shared(void)
+{
+    ram_force_default_shared = true;
+}
+
 bool memory_region_is_default_private(MemoryRegion *mr)
 {
-    return memory_region_has_guest_memfd(mr) &&
+    return !ram_force_default_shared &&
+           memory_region_has_guest_memfd(mr) &&
            (mr->ram_block->flags & RAM_DEFAULT_PRIVATE);
 }
 
 void memory_region_set_default_private(MemoryRegion *mr)
 {
-    if (memory_region_has_guest_memfd(mr)) {
+    if (!ram_force_default_shared && memory_region_has_guest_memfd(mr)) {
         mr->ram_block->flags |= RAM_DEFAULT_PRIVATE;
     }
 }

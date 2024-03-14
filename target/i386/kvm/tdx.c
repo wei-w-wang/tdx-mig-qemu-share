@@ -1434,6 +1434,7 @@ static void tdx_guest_set_migtd_setup(Object *obj, const char *value,
     g_free(tdx->migtd_setup_path);
     tdx->migtd_setup_path = g_strdup(value);
 
+    memory_force_default_shared();
     tdx->attributes |= TDX_TD_ATTRIBUTES_MIG;
 }
 
