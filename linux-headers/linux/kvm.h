@@ -2349,6 +2349,7 @@ struct kvm_cgm_data {
 	__u64 size; /* bytes */
 };
 
+#define KVM_CGM_GET_EPOCH_TOKEN _IOWR(KVMIO,  0xd7, struct kvm_cgm_data)
 
 #define KVM_CGM_GET_MEMORY_STATE _IOWR(KVMIO,  0xd9, struct kvm_cgm_memory_state)
 

@@ -86,3 +86,21 @@ int cgs_mig_get_memory_state(hwaddr cgs_private_gpa, uint16_t gfn_num)
 
     return state.data.size;
 }
+
+/* Return number of bytes sent or the error value (< 0) */
+int cgs_mig_get_epoch_token(void)
+{
+    int ret;
+
+    struct kvm_cgm_data data = {
+        .uaddr = (uint64_t)cgs_data_channel.buf,
+        .size = cgs_data_channel.buf_size,
+    };
+
+    ret = kvm_vm_ioctl(kvm_state, KVM_CGM_GET_EPOCH_TOKEN, &data);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return (int)data.size;
+}

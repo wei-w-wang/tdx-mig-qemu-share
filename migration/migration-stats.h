@@ -104,6 +104,8 @@ typedef struct {
 
     /* Number of private pages that have been sent */
     Stat64 cgs_private_pages;
+    /* Number of confidential guest migration epochs */
+    Stat64 cgs_epochs;
 } MigrationAtomicStats;
 
 extern MigrationAtomicStats mig_stats;
