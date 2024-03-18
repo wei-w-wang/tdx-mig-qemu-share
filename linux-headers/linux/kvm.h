@@ -2355,6 +2355,8 @@ struct kvm_cgm_data {
 
 #define KVM_CGM_GET_MEMORY_STATE _IOWR(KVMIO,  0xd9, struct kvm_cgm_memory_state)
 
+#define KVM_CGM_SET_MEMORY_STATE _IOWR(KVMIO,  0xda, struct kvm_cgm_memory_state)
+
 #define KVM_CGM_GFN_NUM_MAX	512
 struct kvm_cgm_memory_state {
 	struct kvm_cgm_data data;

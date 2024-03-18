@@ -3986,9 +3986,47 @@ static int ram_handle_cgs_data(QEMUFile *f, uint32_t cgs_flags)
     case CGS_SAVE_FLAG_EPOCH_TOKEN:
         ret = cgs_mig_set_epoch_token(cgs_data_size);
         break;
+    case CGS_SAVE_FLAG_MEMORY:
+        ret = cgs_mig_set_memory_state(cgs_data_size, 1);
+	break;
     default:
          error_report("Unknown cgs flags: 0x%x", cgs_flags);
          ret = -EINVAL;
+    }
+
+    return ret;
+}
+
+static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
+                                    bool is_private)
+{
+    unsigned long bit = offset >> TARGET_PAGE_BITS;
+    bool was_private;
+    hwaddr gpa;
+    int ret = 0;
+
+    /* Some RAMBlock,e.g. pc.bios, doesn't have cgs_bitmap */
+    if (!block->cgs_bmap) {
+        return 0;
+    }
+
+    was_private = test_bit(bit, block->cgs_bmap);
+    if (was_private == is_private) {
+        return 0;
+    }
+
+    /* Unaliased GPA is the same for both private pages and shared pages */
+    ret = kvm_physical_memory_addr_from_host(kvm_state,
+                                             block->host + offset, &gpa);
+    if (!ret) {
+        error_report("%s: fail to find gpa", __func__);
+        return -ENOENT;
+    }
+
+    ret = kvm_convert_memory(gpa, TARGET_PAGE_SIZE, is_private);
+    if (ret) {
+        error_report("%s: fail to convert, gpa=%lx, is_private=%d",
+                      __func__, gpa, is_private);
     }
 
     return ret;
@@ -4018,6 +4056,7 @@ static int ram_load_precopy(QEMUFile *f)
         void *host = NULL, *host_bak = NULL;
         uint32_t cgs_flags;
         uint8_t ch;
+	bool is_private_page = false;
 
         /*
          * Yield periodically to let main loop run, but an iteration of
@@ -4045,10 +4084,15 @@ static int ram_load_precopy(QEMUFile *f)
 
         if (flags & RAM_SAVE_FLAG_CGS_STATE) {
             cgs_flags = qemu_get_be32(f);
+
+            if (cgs_flags & CGS_SAVE_FLAG_MEMORY) {
+                is_private_page = true;
+            }
         }
 
-        if (flags & (RAM_SAVE_FLAG_ZERO | RAM_SAVE_FLAG_PAGE |
-                     RAM_SAVE_FLAG_COMPRESS_PAGE | RAM_SAVE_FLAG_XBZRLE)) {
+        if (is_private_page ||
+	    (flags & (RAM_SAVE_FLAG_ZERO | RAM_SAVE_FLAG_PAGE |
+                     RAM_SAVE_FLAG_COMPRESS_PAGE | RAM_SAVE_FLAG_XBZRLE))) {
             RAMBlock *block = ram_block_from_stream(mis, f, flags,
                                                     RAM_CHANNEL_PRECOPY);
 
@@ -4064,7 +4108,7 @@ static int ram_load_precopy(QEMUFile *f)
              * speed of the migration, but it obviously reduce the downtime of
              * back-up all SVM'S memory in COLO preparing stage.
              */
-            if (migration_incoming_colo_enabled()) {
+            if (!is_private_page && migration_incoming_colo_enabled()) {
                 if (migration_incoming_in_colo_state()) {
                     /* In COLO stage, put all pages into cache temporarily */
                     host = colo_cache_from_block_offset(block, addr, true);
@@ -4086,6 +4130,10 @@ static int ram_load_precopy(QEMUFile *f)
             }
 
             trace_ram_load_loop(block->idstr, (uint64_t)addr, flags, host);
+            ret = ram_load_update_cgs_bmap(block, addr, is_private_page);
+            if (ret) {
+                return ret;
+            }
         }
 
         switch (flags & ~RAM_SAVE_FLAG_CONTINUE) {
