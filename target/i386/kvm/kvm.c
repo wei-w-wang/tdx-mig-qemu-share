@@ -3823,12 +3823,10 @@ static void kvm_init_msrs(X86CPU *cpu)
     assert(kvm_buf_set_msrs(cpu) == 0);
 }
 
-static int kvm_put_msrs(X86CPU *cpu, int level)
+static void kvm_put_msrs_legacy(X86CPU *cpu, int level)
 {
     CPUX86State *env = &cpu->env;
     int i;
-
-    kvm_msr_buf_reset(cpu);
 
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_CS, env->sysenter_cs);
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_ESP, env->sysenter_esp);
@@ -4149,6 +4147,53 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
         for (i = 0; i < (env->mcg_cap & 0xff) * 4; i++) {
             kvm_msr_entry_add(cpu, MSR_MC0_CTL + i, env->mce_banks[i]);
         }
+    }
+}
+
+static void kvm_put_msrs_tdx(X86CPU *cpu, int level)
+{
+    CPUX86State *env = &cpu->env;
+    int i;
+
+    kvm_msr_entry_add(cpu, MSR_PAT, env->pat);
+
+    if (has_msr_misc_enable) {
+        kvm_msr_entry_add(cpu, MSR_IA32_MISC_ENABLE,
+                          env->msr_ia32_misc_enable);
+    }
+
+    if (env->mcg_cap) {
+        kvm_msr_entry_add(cpu, MSR_MCG_STATUS, env->mcg_status);
+        kvm_msr_entry_add(cpu, MSR_MCG_CTL, env->mcg_ctl);
+        if (has_msr_mcg_ext_ctl) {
+            kvm_msr_entry_add(cpu, MSR_MCG_EXT_CTL, env->mcg_ext_ctl);
+        }
+        for (i = 0; i < (env->mcg_cap & 0xff) * 4; i++) {
+            kvm_msr_entry_add(cpu, MSR_MC0_CTL + i, env->mce_banks[i]);
+        }
+    }
+
+    /*
+     * The following MSRs have side effects on the guest or are too heavy
+     * for normal writeback. Limit them to reset or full state updates.
+     */
+    if (level < KVM_PUT_RESET_STATE) {
+        return;
+    }
+
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_POLL_CONTROL)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_POLL_CONTROL, env->poll_control_msr);
+    }
+}
+
+static int kvm_put_msrs(X86CPU *cpu, int level)
+{
+    kvm_msr_buf_reset(cpu);
+
+    if (is_tdx_vm()) {
+        kvm_put_msrs_tdx(cpu, level);
+    } else {
+        kvm_put_msrs_legacy(cpu, level);
     }
 
     return kvm_buf_set_msrs(cpu);
