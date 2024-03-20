@@ -3816,14 +3816,10 @@ static int kvm_get_sregs2(X86CPU *cpu)
     return 0;
 }
 
-static int kvm_get_msrs(X86CPU *cpu)
+static void kvm_get_msrs_legacy(X86CPU *cpu)
 {
     CPUX86State *env = &cpu->env;
-    struct kvm_msr_entry *msrs = cpu->kvm_msr_buf->entries;
-    int ret, i;
-    uint64_t mtrr_top_bits;
-
-    kvm_msr_buf_reset(cpu);
+    int i;
 
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_CS, 0);
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_ESP, 0);
@@ -4032,6 +4028,7 @@ static int kvm_get_msrs(X86CPU *cpu)
     if (kvm_enabled() && cpu->enable_pmu &&
         (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
         uint64_t depth;
+	int ret;
 
         ret = kvm_get_one_msr(cpu, MSR_ARCH_LBR_DEPTH, &depth);
         if (ret == 1 && depth == ARCH_LBR_NR_ENTRIES) {
@@ -4044,6 +4041,63 @@ static int kvm_get_msrs(X86CPU *cpu)
                 kvm_msr_entry_add(cpu, MSR_ARCH_LBR_INFO_0 + i, 0);
             }
         }
+    }
+}
+
+static void kvm_get_msrs_tdx(X86CPU *cpu)
+{
+    CPUX86State *env = &cpu->env;
+    int i;
+
+    if (has_msr_tsc_deadline) {
+        kvm_msr_entry_add(cpu, MSR_IA32_TSCDEADLINE, 0);
+    }
+
+    if (has_msr_misc_enable) {
+        kvm_msr_entry_add(cpu, MSR_IA32_MISC_ENABLE, 0);
+    }
+
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_STEAL_TIME)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_STEAL_TIME, 0);
+    }
+
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_POLL_CONTROL)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_POLL_CONTROL, 1);
+    }
+
+    if (env->features[FEAT_1_EDX] & CPUID_MTRR) {
+        kvm_msr_entry_add(cpu, MSR_MTRRdefType, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix64K_00000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_80000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_A0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C8000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D8000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E8000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F8000, 0);
+        for (i = 0; i < MSR_MTRRcap_VCNT; i++) {
+            kvm_msr_entry_add(cpu, MSR_MTRRphysBase(i), 0);
+            kvm_msr_entry_add(cpu, MSR_MTRRphysMask(i), 0);
+        }
+    }
+}
+
+static int kvm_get_msrs(X86CPU *cpu)
+{
+    CPUX86State *env = &cpu->env;
+    struct kvm_msr_entry *msrs = cpu->kvm_msr_buf->entries;
+    int ret, i;
+    uint64_t mtrr_top_bits;
+
+    kvm_msr_buf_reset(cpu);
+
+    if (is_tdx_vm()) {
+        kvm_get_msrs_tdx(cpu);
+    } else {
+        kvm_get_msrs_legacy(cpu);
     }
 
     ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_MSRS, cpu->kvm_msr_buf);
