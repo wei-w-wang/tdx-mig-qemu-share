@@ -2372,4 +2372,6 @@ struct kvm_cgm_memory_state {
 	};
 };
 
+#define KVM_CGM_SESSION_END _IOWR(KVMIO,  0xdd, long)
+
 #endif /* __LINUX_KVM_H */
