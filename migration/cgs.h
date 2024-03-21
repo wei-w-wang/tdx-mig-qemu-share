@@ -25,4 +25,8 @@ int cgs_mig_get_epoch_token(void);
 
 int cgs_mig_set_epoch_token(uint64_t data_size);
 
+int cgs_mig_get_vcpu_state(CPUState *cpu);
+
+int cgs_mig_set_vcpu_state(CPUState *cpu, uint32_t data_size);
+
 #endif

@@ -3,6 +3,7 @@
 #include "exec/exec-all.h"
 #include "hw/isa/isa.h"
 #include "migration/cpu.h"
+#include "migration/cgs.h"
 #include "kvm/hyperv.h"
 #include "hw/i386/x86.h"
 #include "kvm/kvm_i386.h"
@@ -1605,6 +1606,39 @@ static const VMStateDescription vmstate_triple_fault = {
     }
 };
 
+static int cgs_state_save(QEMUFile *f, void *priv, size_t unused,
+                          const VMStateField *field, JSONWriter *vmdesc)
+{
+    X86CPU *cpu = priv;
+    int len;
+
+    len = cgs_mig_get_vcpu_state(CPU(cpu));
+    if (len < 0) {
+        return len;
+    }
+    qemu_put_be32(f, len);
+    qemu_put_buffer(f, cgs_data_channel.buf, len);
+
+    return 0;
+}
+
+static int cgs_state_load(QEMUFile *f, void *priv, size_t unused,
+                         const VMStateField *field)
+{
+    X86CPU *cpu = priv;
+    int len = qemu_get_be32(f);
+
+    qemu_get_buffer(f, cgs_data_channel.buf, len);
+
+    return cgs_mig_set_vcpu_state(CPU(cpu), len);
+}
+
+static const VMStateInfo cgs_vcpu_vmstate_info = {
+    .name = "cgs-vcpu",
+    .put  = cgs_state_save,
+    .get  = cgs_state_load,
+};
+
 const VMStateDescription vmstate_x86_cpu = {
     .name = "cpu",
     .version_id = 12,
@@ -1696,6 +1730,14 @@ const VMStateDescription vmstate_x86_cpu = {
         VMSTATE_UINT64_V(env.xcr0, X86CPU, 12),
         VMSTATE_UINT64_V(env.xstate_bv, X86CPU, 12),
         VMSTATE_YMMH_REGS_VARS(env.xmm_regs, X86CPU, 0, 12),
+        {
+            .name = "cgs-state",
+            .version_id = 0,
+            .size = 0,
+            .info = &cgs_vcpu_vmstate_info,
+            .flags = VMS_SINGLE,
+            .offset = 0,
+        },
         VMSTATE_END_OF_LIST()
         /* The above list is not sorted /wrt version numbers, watch out! */
     },
