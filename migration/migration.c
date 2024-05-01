@@ -67,6 +67,7 @@
 #include "options.h"
 #include "sysemu/dirtylimit.h"
 #include "qemu/sockets.h"
+#include "cgs.h"
 
 static NotifierList migration_state_notifiers =
     NOTIFIER_LIST_INITIALIZER(migration_state_notifiers);
@@ -550,6 +551,10 @@ static void qemu_start_incoming_migration(const char *uri, bool has_channels,
         return;
     }
 
+    if (cgs_mig_init() < 0) {
+        return;
+    }
+
     migrate_set_state(&mis->state, MIGRATION_STATUS_NONE,
                       MIGRATION_STATUS_SETUP);
 
@@ -648,6 +653,7 @@ static void process_incoming_migration_bh(void *opaque)
      */
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COMPLETED);
+    cgs_mig_cleanup();
     qemu_bh_delete(mis->bh);
     migration_incoming_state_destroy();
 }
@@ -1285,6 +1291,7 @@ static void migrate_fd_cleanup(MigrationState *s)
     s->vmdesc = NULL;
 
     qemu_savevm_state_cleanup();
+    cgs_mig_cleanup();
 
     if (s->to_dst_file) {
         QEMUFile *tmp;
@@ -1560,6 +1567,11 @@ int migrate_init(MigrationState *s, Error **errp)
     int ret;
 
     ret = qemu_savevm_state_prepare(errp);
+    if (ret) {
+        return ret;
+    }
+
+    ret = cgs_mig_init();
     if (ret) {
         return ret;
     }

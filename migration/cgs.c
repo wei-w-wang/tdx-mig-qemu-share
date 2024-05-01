@@ -1,0 +1,55 @@
+#include "cgs.h"
+#include "sysemu/kvm.h"
+#include "qemu/error-report.h"
+#include "qemu/memalign.h"
+#include "hw/boards.h"
+
+CgsDataChannel cgs_data_channel;
+
+/* The default memory migration sends 1 page only each time */
+uint32_t cgs_mig_batch_memory_pages = 1;
+
+int cgs_mig_init(void)
+{
+    int ret;
+    struct kvm_cap_cgm cap_cgm = {
+        .nr_ubuf_pages = cgs_mig_batch_memory_pages,
+        .nr_threads = 1,
+    };
+
+    if (!current_machine->cgs) {
+        return 0;
+    }
+
+    ret = kvm_check_extension(kvm_state, KVM_CAP_CGM);
+    if (ret != KVM_CGM_UAPI_VERSION) {
+        error_report("KVM_CAP_CGM check failed");
+        return -EINVAL;
+    }
+
+    ret = kvm_vm_enable_cap(kvm_state, KVM_CAP_CGM, 0,
+                            (uint64_t)(&cap_cgm));
+    if (ret < 0) {
+        error_report("KVM_CAP_CGM enable failed");
+        return ret;
+    }
+
+    cgs_data_channel.buf_size = cap_cgm.nr_ubuf_pages * TARGET_PAGE_SIZE;
+    cgs_data_channel.buf = qemu_memalign(TARGET_PAGE_SIZE,
+                                         cgs_data_channel.buf_size);
+    if ((uintptr_t)cgs_data_channel.buf & (TARGET_PAGE_SIZE - 1)) {
+        error_report("unexpected: cgs_data_channel.buf=%lx",
+                      (uint64_t)cgs_data_channel.buf);
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
+void cgs_mig_cleanup(void)
+{
+    if (!current_machine->cgs)
+        return;
+
+    g_free(cgs_data_channel.buf);
+}

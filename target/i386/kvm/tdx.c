@@ -38,6 +38,7 @@
 #include "../cpu-internal.h"
 #include "migration/migration.h"
 #include "migration/misc.h"
+#include "migration/cgs.h"
 
 #include "trace.h"
 
