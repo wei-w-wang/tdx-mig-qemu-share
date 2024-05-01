@@ -50,6 +50,7 @@
 #include "sysemu/cpus.h"
 #include "exec/memory.h"
 #include "exec/target_page.h"
+#include "exec/confidential-guest-support.h"
 #include "trace.h"
 #include "qemu/iov.h"
 #include "qemu/job.h"
@@ -91,6 +92,7 @@ enum qemu_vm_cmd {
     MIG_CMD_ENABLE_COLO,       /* Enable COLO */
     MIG_CMD_POSTCOPY_RESUME,   /* resume postcopy on dest */
     MIG_CMD_RECV_BITMAP,       /* Request for recved bitmap on dst */
+    MIG_CMD_CGS_MIGRATION_PREPARE, /* Start cgs migration preparation */
     MIG_CMD_MAX
 };
 
@@ -1218,6 +1220,31 @@ void qemu_savevm_send_recv_bitmap(QEMUFile *f, char *block_name)
     memcpy(buf + 1, block_name, len);
 
     qemu_savevm_command_send(f, MIG_CMD_RECV_BITMAP, len + 1, (uint8_t *)buf);
+}
+
+int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f)
+{
+    ConfidentialGuestSupport *cgs = current_machine->cgs;
+    void *buf = cgs_data_channel.buf;
+    uint8_t cont = false;
+    int len;
+
+    if (!cgs || !cgs->migration_prepare) {
+        return 0;
+    }
+
+    do {
+        len = cgs->migration_prepare(buf, true, &cont);
+        if (len < 0) {
+            return len;
+        }
+        if (len > UINT16_MAX) {
+            return -EFBIG;
+        }
+        qemu_savevm_command_send(f, MIG_CMD_CGS_MIGRATION_PREPARE, len, buf);
+    } while (cont);
+
+    return 0;
 }
 
 bool qemu_savevm_state_blocked(Error **errp)

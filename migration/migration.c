@@ -3347,6 +3347,12 @@ static void *migration_thread(void *opaque)
         qemu_savevm_send_colo_enable(s->to_dst_file);
     }
 
+    if (qemu_savevm_send_cgs_mig_prepare(s->to_dst_file)) {
+        migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
+                          MIGRATION_STATUS_FAILED);
+	goto done;
+    }
+
     bql_lock();
     qemu_savevm_state_setup(s->to_dst_file);
     bql_unlock();
@@ -3388,6 +3394,7 @@ static void *migration_thread(void *opaque)
         urgent = migration_rate_limit();
     }
 
+done:
     trace_migration_thread_after_loop();
     migration_iteration_finish(s);
     object_unref(OBJECT(s));

@@ -669,7 +669,7 @@ static int tdx_migration_do_prepare(bool is_src)
     return kvm_vm_ioctl(kvm_state, KVM_CGM_PREPARE, &prepare);
 }
 
-static void tdx_migration_prepare(bool is_src)
+static int tdx_migration_prepare(void *buf, bool is_src, uint8_t *cont)
 {
     int ret, max_tries = 10;
 
@@ -684,6 +684,8 @@ static void tdx_migration_prepare(bool is_src)
     if (ret < 0) {
         error_report("migration prepare uAPI failed %s", strerror(-ret));
     }
+
+    return ret;
 }
 
 static void tdx_run_migtd(char *uri)
@@ -737,19 +739,19 @@ static void tdx_migration_state_notifier(Notifier *notifier, void *data)
 
     if (state == MIGRATION_STATUS_SETUP) {
         tdx_launch_migration_assistant();
-    } else if (state == MIGRATION_STATUS_ACTIVE) {
-        tdx_migration_prepare(is_src);
     }
 }
 
 static void tdx_finalize_vm(Notifier *notifier, void *unused)
 {
+    struct ConfidentialGuestSupport *cgs = &tdx_guest->parent_obj;
     TdxFirmware *tdvf = &tdx_guest->tdvf;
     TdxFirmwareEntry *entry;
     RAMBlock *ram_block;
     int r;
 
     if (tdx_guest->attributes & TDX_TD_ATTRIBUTES_MIG) {
+        cgs->migration_prepare = tdx_migration_prepare;
         migration_add_notifier(&tdx_guest->migration_state_notifier,
                                tdx_migration_state_notifier);
     }
@@ -841,7 +843,7 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         error_report("KVM_TDX_FINALIZE_VM failed %s", strerror(-r));
         exit(0);
     }
-    tdx_guest->parent_obj.ready = true;
+    cgs->ready = true;
 }
 
 static Notifier tdx_machine_done_notify = {
