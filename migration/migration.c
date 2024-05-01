@@ -3144,6 +3144,8 @@ static MigIterateState migration_iteration_run(MigrationState *s)
 
 static void migration_iteration_finish(MigrationState *s)
 {
+    long abort = 0;
+
     /* If we enabled cpu throttling for auto-converge, turn it off. */
     cpu_throttle_stop();
 
@@ -3170,6 +3172,7 @@ static void migration_iteration_finish(MigrationState *s)
                 runstate_set(s->vm_old_state);
             }
         }
+	abort = 1;
         break;
 
     default:
@@ -3177,6 +3180,8 @@ static void migration_iteration_finish(MigrationState *s)
         error_report("%s: Unknown ending state %d", __func__, s->state);
         break;
     }
+
+    cgs_mig_session_end(abort);
     migrate_fd_cleanup_schedule(s);
     bql_unlock();
 }
