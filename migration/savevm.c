@@ -38,6 +38,7 @@
 #include "migration/global_state.h"
 #include "migration/channel-block.h"
 #include "ram.h"
+#include "cgs.h"
 #include "qemu-file.h"
 #include "savevm.h"
 #include "postcopy-ram.h"
