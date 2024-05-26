@@ -3974,7 +3974,8 @@ static int parse_ramblocks(QEMUFile *f, ram_addr_t total_ram_bytes)
     return ret;
 }
 
-static int ram_handle_cgs_data(QEMUFile *f, uint32_t cgs_flags)
+static int ram_handle_cgs_data(QEMUFile *f, uint32_t cgs_flags,
+                               hwaddr guest_phys)
 {
     int ret;
     uint32_t cgs_data_size;
@@ -3987,7 +3988,8 @@ static int ram_handle_cgs_data(QEMUFile *f, uint32_t cgs_flags)
         ret = cgs_mig_set_epoch_token(cgs_data_size);
         break;
     case CGS_SAVE_FLAG_MEMORY:
-        ret = cgs_mig_set_memory_state(cgs_data_size, 1);
+        ret = cgs_mig_set_memory_state(cgs_data_size,
+                                       guest_phys >> TARGET_PAGE_BITS, 1);
 	break;
     default:
          error_report("Unknown cgs flags: 0x%x", cgs_flags);
@@ -3998,11 +4000,10 @@ static int ram_handle_cgs_data(QEMUFile *f, uint32_t cgs_flags)
 }
 
 static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
-                                    bool is_private)
+                                    bool is_private, hwaddr *guest_phys)
 {
     unsigned long bit = offset >> TARGET_PAGE_BITS;
     bool was_private;
-    hwaddr gpa;
     int ret = 0;
 
     /* Some RAMBlock,e.g. pc.bios, doesn't have cgs_bitmap */
@@ -4017,16 +4018,16 @@ static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
 
     /* Unaliased GPA is the same for both private pages and shared pages */
     ret = kvm_physical_memory_addr_from_host(kvm_state,
-                                             block->host + offset, &gpa);
+                                             block->host + offset, guest_phys);
     if (!ret) {
         error_report("%s: fail to find gpa", __func__);
         return -ENOENT;
     }
 
-    ret = kvm_convert_memory(gpa, TARGET_PAGE_SIZE, is_private);
+    ret = kvm_convert_memory(*guest_phys, TARGET_PAGE_SIZE, is_private);
     if (ret) {
         error_report("%s: fail to convert, gpa=%lx, is_private=%d",
-                      __func__, gpa, is_private);
+                      __func__, *guest_phys, is_private);
     }
 
     return ret;
@@ -4057,6 +4058,7 @@ static int ram_load_precopy(QEMUFile *f)
         uint32_t cgs_flags;
         uint8_t ch;
 	bool is_private_page = false;
+        hwaddr guest_phys = ~0;
 
         /*
          * Yield periodically to let main loop run, but an iteration of
@@ -4130,7 +4132,8 @@ static int ram_load_precopy(QEMUFile *f)
             }
 
             trace_ram_load_loop(block->idstr, (uint64_t)addr, flags, host);
-            ret = ram_load_update_cgs_bmap(block, addr, is_private_page);
+            ret = ram_load_update_cgs_bmap(block, addr,
+                                           is_private_page, &guest_phys);
             if (ret) {
                 return ret;
             }
@@ -4177,7 +4180,7 @@ static int ram_load_precopy(QEMUFile *f)
             multifd_recv_sync_main();
             break;
         case RAM_SAVE_FLAG_CGS_STATE:
-            ret = ram_handle_cgs_data(f, cgs_flags);
+            ret = ram_handle_cgs_data(f, cgs_flags, guest_phys);
             break;
         case RAM_SAVE_FLAG_EOS:
             /* normal exit */

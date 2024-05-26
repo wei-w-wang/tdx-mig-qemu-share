@@ -87,10 +87,11 @@ int cgs_mig_get_memory_state(hwaddr cgs_private_gpa, uint16_t gfn_num)
     return state.data.size;
 }
 
-int cgs_mig_set_memory_state(uint64_t data_size, uint16_t gfn_num)
+int cgs_mig_set_memory_state(uint64_t data_size, hwaddr gfn, uint16_t gfn_num)
 {
     struct kvm_cgm_memory_state state = { 0 };
 
+    state.gfns_uaddr = (unsigned long)&gfn;
     state.gfn_num = gfn_num;
     state.data.uaddr = (unsigned long)cgs_data_channel.buf;
     state.data.size = data_size;
