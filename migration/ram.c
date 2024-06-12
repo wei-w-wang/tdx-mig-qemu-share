@@ -3980,9 +3980,16 @@ static int ram_handle_cgs_data(QEMUFile *f, uint32_t cgs_flags,
     int ret;
     uint32_t cgs_data_size;
 
-    cgs_data_size = qemu_get_be32(f);
-    qemu_get_buffer(f, cgs_data_channel.buf, cgs_data_size);
+    cgs_data_size = 0;
+    memset(cgs_data_channel.buf, 0, 8192);
 
+    cgs_data_size = qemu_get_be32(f);
+    ret = qemu_get_buffer(f, cgs_data_channel.buf, cgs_data_size);
+    if (ret != cgs_data_size) {
+        error_report("Failed to get cga data, cgs_data_size=%d, ret=%d",
+                      cgs_data_size, ret);
+        return -EIO;
+    }
     switch (cgs_flags) {
     case CGS_SAVE_FLAG_EPOCH_TOKEN:
         ret = cgs_mig_set_epoch_token(cgs_data_size);
@@ -4011,17 +4018,17 @@ static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
         return 0;
     }
 
-    was_private = test_bit(bit, block->cgs_bmap);
-    if (was_private == is_private) {
-        return 0;
-    }
-
     /* Unaliased GPA is the same for both private pages and shared pages */
     ret = kvm_physical_memory_addr_from_host(kvm_state,
                                              block->host + offset, guest_phys);
     if (!ret) {
         error_report("%s: fail to find gpa", __func__);
         return -ENOENT;
+    }
+
+    was_private = test_bit(bit, block->cgs_bmap);
+    if (was_private == is_private) {
+        return 0;
     }
 
     ret = kvm_convert_memory(*guest_phys, TARGET_PAGE_SIZE, is_private);
@@ -4059,6 +4066,7 @@ static int ram_load_precopy(QEMUFile *f)
         uint8_t ch;
 	bool is_private_page = false;
         hwaddr guest_phys = ~0;
+        RAMBlock *block;
 
         /*
          * Yield periodically to let main loop run, but an iteration of
@@ -4095,7 +4103,7 @@ static int ram_load_precopy(QEMUFile *f)
         if (is_private_page ||
 	    (flags & (RAM_SAVE_FLAG_ZERO | RAM_SAVE_FLAG_PAGE |
                      RAM_SAVE_FLAG_COMPRESS_PAGE | RAM_SAVE_FLAG_XBZRLE))) {
-            RAMBlock *block = ram_block_from_stream(mis, f, flags,
+            block = ram_block_from_stream(mis, f, flags,
                                                     RAM_CHANNEL_PRECOPY);
 
             host = host_from_ram_block_offset(block, addr);
