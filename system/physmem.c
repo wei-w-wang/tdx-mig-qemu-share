@@ -1803,6 +1803,10 @@ static void dirty_memory_extend(ram_addr_t old_ram_size,
     }
 }
 
+#ifdef CONFIG_KVM
+#define KVM_GUEST_MEMFD_HUGETLB               		 (1 << 1)
+#endif
+
 static void ram_block_add(RAMBlock *new_block, Error **errp)
 {
     const bool noreserve = qemu_ram_is_noreserve(new_block);
@@ -1844,8 +1848,8 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
     if (kvm_enabled() && (new_block->flags & RAM_GUEST_MEMFD)) {
         assert(new_block->guest_memfd < 0);
 
-        new_block->guest_memfd = kvm_create_guest_memfd(new_block->max_length,
-                                                        0, errp);
+		new_block->guest_memfd = kvm_create_guest_memfd(new_block->max_length,
+                                                         (new_block->flags & RAM_GUEST_MEMFD_HUGETLB) ? KVM_GUEST_MEMFD_HUGETLB : 0, errp);
         if (new_block->guest_memfd < 0) {
             qemu_mutex_unlock_ramlist();
             return;
@@ -1914,7 +1918,7 @@ RAMBlock *qemu_ram_alloc_from_fd(ram_addr_t size, MemoryRegion *mr,
     /* Just support these ram flags by now. */
     assert((ram_flags & ~(RAM_SHARED | RAM_PMEM | RAM_NORESERVE |
                           RAM_PROTECTED | RAM_NAMED_FILE | RAM_READONLY |
-                          RAM_READONLY_FD | RAM_GUEST_MEMFD)) == 0);
+                          RAM_READONLY_FD | RAM_GUEST_MEMFD |RAM_GUEST_MEMFD_HUGETLB)) == 0);
 
     if (xen_enabled()) {
         error_setg(errp, "-mem-path not supported with Xen");
