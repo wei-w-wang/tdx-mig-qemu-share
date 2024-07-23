@@ -1231,13 +1231,15 @@ int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f)
     ConfidentialGuestSupport *cgs = current_machine->cgs;
     void *buf = cgs_data_channel.buf;
     uint8_t cont = false;
-    int len;
+    int len = 0;
 
     if (!cgs || !cgs->migration_prepare) {
         return 0;
     }
 
     do {
+        qemu_savevm_command_send(f, MIG_CMD_CGS_MIGRATION_PREPARE, len, buf);
+        sleep(2);
         len = cgs->migration_prepare(buf, true, &cont);
         if (len < 0) {
             return len;
@@ -1245,7 +1247,6 @@ int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f)
         if (len > UINT16_MAX) {
             return -EFBIG;
         }
-        qemu_savevm_command_send(f, MIG_CMD_CGS_MIGRATION_PREPARE, len, buf);
     } while (cont);
 
     return 0;
