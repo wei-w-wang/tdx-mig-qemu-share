@@ -725,6 +725,7 @@ int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
     X86CPU *x86cpu = X86_CPU(cpu);
     CPUX86State *env = &x86cpu->env;
     g_autofree struct kvm_tdx_init_vm *init_vm = NULL;
+    uint32_t flags = 0;
     size_t data_len;
     int r = 0;
 
@@ -823,8 +824,12 @@ int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
                     env->features[FEAT_XSAVE_XSS_LO] |
                     env->features[FEAT_XSAVE_XSS_HI];
 
+    if (runstate_check(RUN_STATE_INMIGRATE)) {
+        flags = KVM_TDX_INIT_VM_F_POST_INIT;
+    }
+
     do {
-        r = tdx_vm_ioctl(KVM_TDX_INIT_VM, 0, init_vm);
+        r = tdx_vm_ioctl(KVM_TDX_INIT_VM, flags, init_vm);
     } while (r == -EAGAIN);
     if (r < 0) {
         error_setg_errno(errp, -r, "KVM_TDX_INIT_VM failed");
