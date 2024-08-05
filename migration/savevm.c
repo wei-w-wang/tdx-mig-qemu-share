@@ -49,6 +49,7 @@
 #include "sysemu/cpus.h"
 #include "exec/memory.h"
 #include "exec/target_page.h"
+#include "exec/confidential-guest-support.h"
 #include "trace.h"
 #include "qemu/iov.h"
 #include "qemu/job.h"
@@ -90,6 +91,7 @@ enum qemu_vm_cmd {
     MIG_CMD_ENABLE_COLO,       /* Enable COLO */
     MIG_CMD_POSTCOPY_RESUME,   /* resume postcopy on dest */
     MIG_CMD_RECV_BITMAP,       /* Request for recved bitmap on dst */
+    MIG_CMD_CGS_MIGRATION_PREPARE, /* Start cgs migration prepare */
     MIG_CMD_MAX
 };
 
@@ -109,6 +111,7 @@ static struct mig_cmd_args {
     [MIG_CMD_POSTCOPY_RESUME]  = { .len =  0, .name = "POSTCOPY_RESUME" },
     [MIG_CMD_PACKAGED]         = { .len =  4, .name = "PACKAGED" },
     [MIG_CMD_RECV_BITMAP]      = { .len = -1, .name = "RECV_BITMAP" },
+    [MIG_CMD_CGS_MIGRATION_PREPARE] = { .len = -1, .name = "CGS_MIG_PREPARE" },
     [MIG_CMD_MAX]              = { .len = -1, .name = "MAX" },
 };
 
@@ -1216,6 +1219,20 @@ void qemu_savevm_send_recv_bitmap(QEMUFile *f, char *block_name)
     memcpy(buf + 1, block_name, len);
 
     qemu_savevm_command_send(f, MIG_CMD_RECV_BITMAP, len + 1, (uint8_t *)buf);
+}
+
+int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f)
+{
+    ConfidentialGuestSupport *cgs = current_machine->cgs;
+
+    if (!cgs || !cgs->migration_prepare) {
+        return 0;
+    }
+
+    qemu_savevm_command_send(f, MIG_CMD_CGS_MIGRATION_PREPARE, 0, NULL);
+    sleep(2); // WA for MigTD. TODO: remove.
+
+    return cgs->migration_prepare(true);
 }
 
 bool qemu_savevm_state_blocked(Error **errp)
@@ -2429,6 +2446,18 @@ static int loadvm_process_enable_colo(MigrationIncomingState *mis)
     return ret;
 }
 
+static int loadvm_process_cgs_mig_prepare(MigrationIncomingState *mis)
+{
+    ConfidentialGuestSupport *cgs = current_machine->cgs;
+
+    if (!cgs || !cgs->migration_prepare) {
+        error_report("cgs migration prepare callback not supported");
+        return -EINVAL;
+    }
+
+    return cgs->migration_prepare(false);
+}
+
 /*
  * Process an incoming 'QEMU_VM_COMMAND'
  * 0           just a normal return
@@ -2527,6 +2556,9 @@ static int loadvm_process_command(QEMUFile *f)
 
     case MIG_CMD_ENABLE_COLO:
         return loadvm_process_enable_colo(mis);
+
+    case MIG_CMD_CGS_MIGRATION_PREPARE:
+        return loadvm_process_cgs_mig_prepare(mis);
     }
 
     return 0;
