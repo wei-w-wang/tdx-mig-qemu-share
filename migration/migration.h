@@ -537,4 +537,6 @@ int migration_rp_wait(MigrationState *s);
  */
 void migration_rp_kick(MigrationState *s);
 
+int migration_get_socket_addr(SocketAddress *buf);
+
 #endif

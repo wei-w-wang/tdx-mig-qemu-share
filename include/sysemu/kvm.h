@@ -188,6 +188,7 @@ typedef struct KVMRouteChange {
 
 /* external API */
 
+pid_t kvm_get_vm_pid(void);
 unsigned int kvm_get_max_memslots(void);
 unsigned int kvm_get_free_memslots(void);
 bool kvm_has_sync_mmu(void);
