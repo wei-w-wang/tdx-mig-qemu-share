@@ -1893,6 +1893,10 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
             qemu_mutex_unlock_ramlist();
             goto out_free;
         }
+
+        new_block->cgs_bmap =
+                bitmap_new(new_block->max_length >> TARGET_PAGE_BITS);
+        ram_block_update_cgs_bmap(new_block, 0, new_block->used_length, true);
     }
 
     new_ram_size = MAX(old_ram_size,
@@ -2143,6 +2147,8 @@ static void reclaim_ramblock(RAMBlock *block)
     } else if (block->fd >= 0) {
         qemu_ram_munmap(block->fd, block->host, block->max_length);
         close(block->fd);
+        g_free(block->cgs_bmap);
+        block->cgs_bmap = NULL;
 #endif
     } else {
         qemu_anon_ram_free(block->host, block->max_length);
@@ -3925,4 +3931,21 @@ bool ram_block_discard_is_required(void)
 {
     return qatomic_read(&ram_block_discard_required_cnt) ||
            qatomic_read(&ram_block_coordinated_discard_required_cnt);
+}
+
+void ram_block_update_cgs_bmap(RAMBlock *rb, uint64_t start,
+                               size_t length, bool to_private)
+{
+    uint64_t bit_start = start >> TARGET_PAGE_BITS;
+    uint64_t bit_length = length >> TARGET_PAGE_BITS;
+
+    if (!rb->cgs_bmap) {
+        return;
+    }
+
+    if (to_private) {
+        bitmap_set(rb->cgs_bmap, bit_start, bit_length);
+    } else {
+        bitmap_clear(rb->cgs_bmap, bit_start, bit_length);
+    }
 }

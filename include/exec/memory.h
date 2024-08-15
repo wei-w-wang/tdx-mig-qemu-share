@@ -3172,6 +3172,9 @@ bool ram_block_discard_is_disabled(void);
  */
 bool ram_block_discard_is_required(void);
 
+void ram_block_update_cgs_bmap(RAMBlock *rb, uint64_t start,
+                               size_t length, bool to_private);
+
 #endif
 
 #endif
