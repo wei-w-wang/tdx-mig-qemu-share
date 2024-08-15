@@ -14,6 +14,6 @@ int cgs_mig_init(void);
 
 void cgs_mig_cleanup(void);
 
-int cgs_mig_start(void);
+int cgs_mig_start(int data_size);
 
 #endif

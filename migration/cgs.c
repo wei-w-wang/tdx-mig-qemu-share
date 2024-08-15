@@ -54,11 +54,11 @@ void cgs_mig_cleanup(void)
     g_free(cgs_data_channel.buf);
 }
 
-int cgs_mig_start(void)
+int cgs_mig_start(int data_size)
 {
     struct kvm_cgm_data data = {
         .uaddr = (uint64_t)cgs_data_channel.buf,
-        .size = cgs_data_channel.buf_size,
+        .size = data_size,
     };
     int ret;
 

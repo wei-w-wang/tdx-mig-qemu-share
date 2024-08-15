@@ -114,6 +114,7 @@ static struct mig_cmd_args {
     [MIG_CMD_PACKAGED]         = { .len =  4, .name = "PACKAGED" },
     [MIG_CMD_RECV_BITMAP]      = { .len = -1, .name = "RECV_BITMAP" },
     [MIG_CMD_CGS_MIGRATION_PREPARE] = { .len = -1, .name = "CGS_MIG_PREPARE" },
+    [MIG_CMD_CGS_START] = { .len = -1, .name = "CGS_MIG_START" },
     [MIG_CMD_MAX]              = { .len = -1, .name = "MAX" },
 };
 
@@ -1246,7 +1247,7 @@ int qemu_savevm_send_cgs_mig_start_data(QEMUFile *f)
         return 0;
     }
 
-    len = cgs_mig_start();
+    len = cgs_mig_start(cgs_data_channel.buf_size);
     if (len < 0) {
         return len;
     }
@@ -2481,6 +2482,25 @@ static int loadvm_process_cgs_mig_prepare(MigrationIncomingState *mis)
     return cgs->migration_prepare(false);
 }
 
+static int loadvm_process_cgs_mig_start(MigrationIncomingState *mis,
+                                        uint16_t len)
+{
+    int ret;
+
+    if (!current_machine->cgs) {
+        return -EINVAL;
+    }
+
+    ret = qemu_get_buffer(mis->from_src_file, cgs_data_channel.buf, len);
+    if (ret != len) {
+        error_report("CMD_PACKAGED: Buffer receive failed, ret=%d len=%u",
+                     ret, len);
+        return -EIO;
+    }
+
+    return cgs_mig_start(len);
+}
+
 /*
  * Process an incoming 'QEMU_VM_COMMAND'
  * 0           just a normal return
@@ -2582,6 +2602,9 @@ static int loadvm_process_command(QEMUFile *f)
 
     case MIG_CMD_CGS_MIGRATION_PREPARE:
         return loadvm_process_cgs_mig_prepare(mis);
+
+    case MIG_CMD_CGS_START:
+        return loadvm_process_cgs_mig_start(mis, len);
     }
 
     return 0;
