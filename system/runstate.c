@@ -511,7 +511,8 @@ void qemu_system_reset(ShutdownCause reason)
     if (cpus_are_resettable()) {
         cpu_synchronize_all_post_reset();
     } else {
-        assert(runstate_check(RUN_STATE_PRELAUNCH));
+        assert(runstate_check(RUN_STATE_PRELAUNCH) ||
+               runstate_check(RUN_STATE_INMIGRATE));
     }
 
     vm_set_suspended(false);
