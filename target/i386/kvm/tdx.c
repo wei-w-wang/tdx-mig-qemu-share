@@ -540,6 +540,8 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         cgs->migration_prepare = tdx_migration_prepare;
         migration_add_notifier(&tdx_guest->migration_state_notifier,
                                tdx_migration_state_notifier);
+    } else {
+        kvm_mark_guest_state_protected();
     }
 
     tdx_init_ram_entries();
@@ -662,8 +664,6 @@ static int tdx_kvm_init(ConfidentialGuestSupport *cgs, Error **errp)
     X86MachineState *x86ms = X86_MACHINE(ms);
     TdxGuest *tdx = TDX_GUEST(cgs);
     int r = 0;
-
-    kvm_mark_guest_state_protected();
 
     if (x86ms->smm == ON_OFF_AUTO_AUTO) {
         x86ms->smm = ON_OFF_AUTO_OFF;
