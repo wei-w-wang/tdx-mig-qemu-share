@@ -1004,6 +1004,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_VM_TYPES 235
 #define KVM_CAP_PRE_FAULT_MEMORY 236
 #define KVM_CAP_X86_APIC_BUS_CYCLES_NS 237
+#define KVM_CAP_CGM 238
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1643,5 +1644,63 @@ struct kvm_pre_fault_memory {
 	__u64 flags;
 	__u64 padding[5];
 };
+
+#define KVM_CGM_UAPI_VERSION		1
+
+struct kvm_cap_cgm {
+	__u32 nr_ubuf_pages;
+	__u32 nr_threads;
+	__u64 reserved[6];
+};
+
+#define KVM_CGM_PREPARE _IOWR(KVMIO,  0xd6, struct kvm_cgm_prepare)
+
+struct kvm_vm_id {
+#define KVM_VM_ID_TYPE_PID 0
+#define KVM_VM_ID_TYPE_FD  1
+	__u32 type;
+	union {
+		__u32 pid;
+		__u32 vmfd;
+	};
+};
+
+struct kvm_cgm_prepare {
+	__u8 is_src;
+	__u8 pad[7];
+	struct kvm_vm_id vmid;
+};
+
+#define KVM_CGM_START _IOWR(KVMIO,  0xd7, struct kvm_cgm_data)
+
+struct kvm_cgm_data {
+	__u64 uaddr;
+	__u64 size; /* bytes */
+};
+
+#define KVM_CGM_GET_EPOCH_TOKEN _IOWR(KVMIO,  0xd8, struct kvm_cgm_data)
+
+#define KVM_CGM_SET_EPOCH_TOKEN _IOWR(KVMIO,  0xd9, struct kvm_cgm_data)
+
+#define KVM_CGM_GET_MEMORY_STATE _IOWR(KVMIO,  0xda, struct kvm_cgm_memory_state)
+
+#define KVM_CGM_SET_MEMORY_STATE _IOWR(KVMIO,  0xdb, struct kvm_cgm_memory_state)
+
+#define KVM_CGM_GET_VCPU_STATE _IOWR(KVMIO,  0xdc, struct kvm_cgm_data)
+
+#define KVM_CGM_SET_VCPU_STATE _IOWR(KVMIO,  0xdd, struct kvm_cgm_data)
+
+#define KVM_CGM_GFN_NUM_MAX	512
+struct kvm_cgm_memory_state {
+	struct kvm_cgm_data data;
+	__u16 gfn_num;
+	__u8  pad1[6];
+	union {
+		__u64 gfns_uaddr;
+		__u8  pad2[8];
+	};
+};
+
+#define KVM_CGM_SESSION_END _IOWR(KVMIO,  0xde, long)
 
 #endif /* __LINUX_KVM_H */
