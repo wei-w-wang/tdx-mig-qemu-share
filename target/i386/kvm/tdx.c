@@ -590,7 +590,6 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         struct kvm_tdx_init_mem_region region;
         uint32_t flags;
 
-
         if (entry->type == TDVF_SECTION_TYPE_PERM_MEM) {
             continue;
         }
@@ -605,6 +604,16 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
                 KVM_TDX_MEASURE_MEMORY_REGION : 0;
 
         do {
+            if (kvm_gmem_default_shared) {
+                r = kvm_convert_memory(entry->address,
+                                       entry->size, true, false);
+                if (r < 0) {
+                    error_report("Populate initial private memory failed %s",
+                                 strerror(-r));
+                    exit(1);
+                }
+            }
+
             r = tdx_vcpu_ioctl(first_cpu, KVM_TDX_INIT_MEM_REGION, flags, &region);
         } while (r == -EAGAIN || r == -EINTR);
         if (r < 0) {
@@ -1069,7 +1078,7 @@ static int tdx_handle_map_gpa(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
     }
 
     if (size > 0) {
-        ret = kvm_convert_memory(gpa, size, private);
+        ret = kvm_convert_memory(gpa, size, private, true);
     }
 
     if (!ret) {
@@ -1444,6 +1453,9 @@ static void tdx_guest_set_migtd_setup(Object *obj, const char *value,
     g_free(tdx->migtd_setup_path);
     tdx->migtd_setup_path = g_strdup(value);
 
+    if (!runstate_check(RUN_STATE_INMIGRATE)) {
+        kvm_gmem_default_shared = true;
+    }
     tdx->attributes |= TDX_TD_ATTRIBUTES_MIG;
 }
 

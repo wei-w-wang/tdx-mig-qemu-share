@@ -1833,7 +1833,7 @@ static void dirty_memory_extend(ram_addr_t old_ram_size,
     }
 }
 
-static void ram_block_add(RAMBlock *new_block, Error **errp)
+static void ram_block_add(RAMBlock *new_block, bool is_bios, Error **errp)
 {
     const bool noreserve = qemu_ram_is_noreserve(new_block);
     const bool shared = qemu_ram_is_shared(new_block);
@@ -1896,7 +1896,10 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
 
         new_block->cgs_bmap =
                 bitmap_new(new_block->max_length >> TARGET_PAGE_BITS);
-        ram_block_update_cgs_bmap(new_block, 0, new_block->used_length, true);
+        if (!kvm_gmem_default_shared || is_bios) {
+            ram_block_update_cgs_bmap(new_block, 0,
+                                      new_block->used_length, true);
+        }
     }
 
     new_ram_size = MAX(old_ram_size,
@@ -2013,14 +2016,13 @@ RAMBlock *qemu_ram_alloc_from_fd(ram_addr_t size, MemoryRegion *mr,
         return NULL;
     }
 
-    ram_block_add(new_block, &local_err);
+    ram_block_add(new_block, !strcmp(mr->name, "pc.bios"), &local_err);
     if (local_err) {
         g_free(new_block);
         error_propagate(errp, local_err);
         return NULL;
     }
     return new_block;
-
 }
 
 
@@ -2104,7 +2106,7 @@ RAMBlock *qemu_ram_alloc_internal(ram_addr_t size, ram_addr_t max_size,
     new_block->page_size = qemu_real_host_page_size();
     new_block->host = host;
     new_block->flags = ram_flags;
-    ram_block_add(new_block, &local_err);
+    ram_block_add(new_block, !strcmp(mr->name, "pc.bios"), &local_err);
     if (local_err) {
         g_free(new_block);
         error_propagate(errp, local_err);

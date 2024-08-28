@@ -5911,7 +5911,7 @@ static int kvm_handle_hc_map_gpa_range(struct kvm_run *run)
 
     trace_kvm_hc_map_gpa_range(gpa, size, attributes, run->hypercall.flags);
 
-    return kvm_convert_memory(gpa, size, attributes & KVM_MAP_GPA_RANGE_ENCRYPTED);
+    return kvm_convert_memory(gpa, size, attributes & KVM_MAP_GPA_RANGE_ENCRYPTED, true);
 }
 
 static int kvm_handle_hypercall(struct kvm_run *run)
