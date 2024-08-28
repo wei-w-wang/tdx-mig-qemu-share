@@ -94,6 +94,7 @@
 #define RAM_SAVE_FLAG_CGS_STATE        0x400
 
 #define CGS_SAVE_FLAG_MEMORY           0x1
+#define CGS_SAVE_FLAG_EPOCH_TOKEN      0x2
 
 /*
  * mapped-ram migration supports O_DIRECT, so we need to make sure the
@@ -129,6 +130,8 @@ struct PageSearchStatus {
     unsigned long page;
     /* Guest-physical address of the current page if it is private */
     hwaddr cgs_private_gpa;
+    /* Used by cgs migration and set to get a new epoch token */
+    bool cgs_epoch_token_update;
     /* Set once we wrap around */
     bool         complete_round;
     /* Whether we're sending a host page */
@@ -1385,6 +1388,7 @@ static int find_dirty_block(RAMState *rs, PageSearchStatus *pss)
             pss->block = QLIST_FIRST_RCU(&ram_list.blocks);
             /* Flag that we've looped */
             pss->complete_round = true;
+	    pss->cgs_epoch_token_update = true;
             /* After the first round, enable XBZRLE. */
             if (migrate_xbzrle()) {
                 rs->xbzrle_started = true;
@@ -2079,8 +2083,13 @@ static void ram_save_cgs_data(PageSearchStatus *pss, uint32_t cgs_flags,
     RAMBlock *block = pss->block;
     QEMUFile *f = pss->pss_channel;
 
-    ram_transferred_add(save_page_header(pss, f, block,
-                                         offset | RAM_SAVE_FLAG_CGS_STATE));
+    if (cgs_flags & CGS_SAVE_FLAG_EPOCH_TOKEN) {
+        qemu_put_be64(f, RAM_SAVE_FLAG_CGS_STATE);
+        qemu_put_be32(f, CGS_SAVE_FLAG_EPOCH_TOKEN);
+    } else {
+        ram_transferred_add(save_page_header(pss, f, block,
+                                             offset | RAM_SAVE_FLAG_CGS_STATE));
+    }
 
     qemu_put_be32(f, data_size);
     qemu_put_buffer(f, cgs_data_channel.buf, data_size);
@@ -2091,6 +2100,17 @@ static void ram_save_cgs_data(PageSearchStatus *pss, uint32_t cgs_flags,
 static int ram_save_target_page_private(PageSearchStatus *pss)
 {
     int res;
+
+    if (!migration_in_postcopy() && pss->cgs_epoch_token_update) {
+        res = cgs_mig_get_epoch_token();
+        if (res < 0) {
+            return (int)res;
+        } else if (res > 0) {
+            ram_save_cgs_data(pss, CGS_SAVE_FLAG_EPOCH_TOKEN, res);
+            stat64_add(&mig_stats.cgs_epochs, 1);
+            pss->cgs_epoch_token_update = false;
+        }
+    }
 
     res = cgs_mig_get_memory_state(pss->cgs_private_gpa, 1);
     if (res < 0) {
@@ -2483,6 +2503,7 @@ static void ram_state_reset(RAMState *rs)
 
     for (i = 0; i < RAM_CHANNEL_MAX; i++) {
         rs->pss[i].last_sent_block = NULL;
+        rs->pss[i].cgs_epoch_token_update = true;
     }
 
     rs->last_seen_block = NULL;
