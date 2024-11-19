@@ -38,6 +38,7 @@
 #include "migration/global_state.h"
 #include "migration/channel-block.h"
 #include "ram.h"
+#include "cgs.h"
 #include "qemu-file.h"
 #include "savevm.h"
 #include "postcopy-ram.h"
@@ -92,6 +93,7 @@ enum qemu_vm_cmd {
     MIG_CMD_POSTCOPY_RESUME,   /* resume postcopy on dest */
     MIG_CMD_RECV_BITMAP,       /* Request for recved bitmap on dst */
     MIG_CMD_CGS_MIGRATION_PREPARE, /* Start cgs migration prepare */
+    MIG_CMD_CGS_START, /* Start cgs migration session */
     MIG_CMD_MAX
 };
 
@@ -1235,6 +1237,27 @@ int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f)
     sleep(2); // WA for MigTD. TODO: remove.
 
     return cgs->migration_prepare(true);
+}
+
+int qemu_savevm_send_cgs_mig_start_data(QEMUFile *f)
+{
+    void *buf = cgs_data_channel.buf;
+    int len;
+
+    if (!current_machine->cgs) {
+        return 0;
+    }
+
+    len = cgs_mig_start();
+    if (len < 0) {
+        return len;
+    }
+    if (len > UINT16_MAX) {
+        return -EFBIG;
+    }
+    qemu_savevm_command_send(f, MIG_CMD_CGS_START, len, buf);
+
+    return 0;
 }
 
 bool qemu_savevm_state_blocked(Error **errp)
