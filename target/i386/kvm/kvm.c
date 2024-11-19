@@ -3480,7 +3480,7 @@ static int kvm_put_xcrs(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     struct kvm_xcrs xcrs = {};
 
-    if (!has_xcrs) {
+    if (is_tdx_vm() || !has_xcrs) {
         return 0;
     }
 
@@ -4267,7 +4267,7 @@ static int kvm_get_xcrs(X86CPU *cpu)
     int i, ret;
     struct kvm_xcrs xcrs;
 
-    if (!has_xcrs) {
+    if (is_tdx_vm() || !has_xcrs) {
         return 0;
     }
 
