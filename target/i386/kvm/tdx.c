@@ -35,6 +35,7 @@
 #include "tdx.h"
 #include "migration/migration.h"
 #include "migration/misc.h"
+#include "migration/cgs.h"
 
 #include "standard-headers/asm-x86/kvm_para.h"
 

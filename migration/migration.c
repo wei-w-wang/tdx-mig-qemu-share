@@ -66,6 +66,7 @@
 #include "sysemu/dirtylimit.h"
 #include "qemu/sockets.h"
 #include "sysemu/kvm.h"
+#include "cgs.h"
 
 #define NOTIFIER_ELEM_INIT(array, elem)    \
     [elem] = NOTIFIER_WITH_RETURN_LIST_INITIALIZER((array)[elem])
@@ -687,6 +688,10 @@ static void qemu_start_incoming_migration(const char *uri, bool has_channels,
         return;
     }
 
+    if (cgs_mig_init() < 0) {
+        return;
+    }
+
     if (!migration_incoming_state_setup(mis, errp)) {
         return;
     }
@@ -783,6 +788,7 @@ static void process_incoming_migration_bh(void *opaque)
      */
     migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
                       MIGRATION_STATUS_COMPLETED);
+    cgs_mig_cleanup();
     migration_incoming_state_destroy();
 }
 
@@ -1393,6 +1399,7 @@ static void migrate_fd_cleanup(MigrationState *s)
     s->vmdesc = NULL;
 
     qemu_savevm_state_cleanup();
+    cgs_mig_cleanup();
 
     close_return_path_on_source(s);
 
@@ -1668,6 +1675,11 @@ int migrate_init(MigrationState *s, Error **errp)
     int ret;
 
     ret = qemu_savevm_state_prepare(errp);
+    if (ret) {
+        return ret;
+    }
+
+    ret = cgs_mig_init();
     if (ret) {
         return ret;
     }
