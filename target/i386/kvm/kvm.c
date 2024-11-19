@@ -4401,14 +4401,10 @@ static int kvm_get_sregs2(X86CPU *cpu)
     return 0;
 }
 
-static int kvm_get_msrs(X86CPU *cpu)
+static void kvm_get_msrs_legacy(X86CPU *cpu)
 {
     CPUX86State *env = &cpu->env;
-    struct kvm_msr_entry *msrs = cpu->kvm_msr_buf->entries;
-    int ret, i;
-    uint64_t mtrr_top_bits;
-
-    kvm_msr_buf_reset(cpu);
+    int i;
 
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_CS, 0);
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_ESP, 0);
@@ -4631,6 +4627,7 @@ static int kvm_get_msrs(X86CPU *cpu)
     if (kvm_enabled() && cpu->enable_pmu &&
         (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
         uint64_t depth;
+	int ret;
 
         ret = kvm_get_one_msr(cpu, MSR_ARCH_LBR_DEPTH, &depth);
         if (ret == 1 && depth == ARCH_LBR_NR_ENTRIES) {
@@ -4643,6 +4640,53 @@ static int kvm_get_msrs(X86CPU *cpu)
                 kvm_msr_entry_add(cpu, MSR_ARCH_LBR_INFO_0 + i, 0);
             }
         }
+    }
+}
+
+static void kvm_get_msrs_tdx(X86CPU *cpu)
+{
+    CPUX86State *env = &cpu->env;
+    int i;
+
+    kvm_msr_entry_add(cpu, MSR_PAT, 0);
+
+    if (has_msr_tsc_deadline) {
+        kvm_msr_entry_add(cpu, MSR_IA32_TSCDEADLINE, 0);
+    }
+
+    if (has_msr_misc_enable) {
+        kvm_msr_entry_add(cpu, MSR_IA32_MISC_ENABLE, 0);
+    }
+
+    if (env->mcg_cap) {
+        kvm_msr_entry_add(cpu, MSR_MCG_STATUS, 0);
+        kvm_msr_entry_add(cpu, MSR_MCG_CTL, 0);
+        if (has_msr_mcg_ext_ctl) {
+            kvm_msr_entry_add(cpu, MSR_MCG_EXT_CTL, 0);
+        }
+        for (i = 0; i < (env->mcg_cap & 0xff) * 4; i++) {
+            kvm_msr_entry_add(cpu, MSR_MC0_CTL + i, 0);
+        }
+    }
+
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_POLL_CONTROL)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_POLL_CONTROL, 1);
+    }
+}
+
+static int kvm_get_msrs(X86CPU *cpu)
+{
+    CPUX86State *env = &cpu->env;
+    struct kvm_msr_entry *msrs = cpu->kvm_msr_buf->entries;
+    int ret, i;
+    uint64_t mtrr_top_bits;
+
+    kvm_msr_buf_reset(cpu);
+
+    if (is_tdx_vm()) {
+        kvm_get_msrs_tdx(cpu);
+    } else {
+        kvm_get_msrs_legacy(cpu);
     }
 
     ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_MSRS, cpu->kvm_msr_buf);
