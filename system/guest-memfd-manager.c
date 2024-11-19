@@ -220,27 +220,12 @@ static int guest_memfd_rdm_replay_populated(const RamDiscardManager *rdm,
                                                 guest_memfd_rdm_replay_populated_cb);
 }
 
-static int guest_memfd_rdm_replay_discarded_cb(MemoryRegionSection *section, void *arg)
-{
-    struct GuestMemfdReplayData *data = arg;
-    ReplayRamDiscard replay_fn = data->fn;
-
-    replay_fn(section, data->opaque);
-
-    return 0;
-}
-
 static void guest_memfd_rdm_replay_discarded(const RamDiscardManager *rdm,
                                              MemoryRegionSection *section,
                                              ReplayRamDiscard replay_fn,
                                              void *opaque)
 {
-    GuestMemfdManager *gmm = GUEST_MEMFD_MANAGER(rdm);
-    struct GuestMemfdReplayData data = { .fn = replay_fn, .opaque = opaque };
 
-    g_assert(section->mr == gmm->mr);
-    guest_memfd_for_each_discarded_range(gmm, section, &data,
-                                         guest_memfd_rdm_replay_discarded_cb);
 }
 
 static bool guest_memfd_is_valid_range(GuestMemfdManager *gmm,
