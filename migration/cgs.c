@@ -106,7 +106,7 @@ int cgs_mig_get_epoch_token(void)
 
     struct kvm_cgm_data data = {
         .uaddr = (uint64_t)cgs_data_channel.buf,
-        .size = cgs_data_channel.buf_size,
+        .size = 0,
     };
 
     ret = kvm_vm_ioctl(kvm_state, KVM_CGM_GET_EPOCH_TOKEN, &data);
@@ -125,4 +125,31 @@ int cgs_mig_set_epoch_token(uint64_t data_size)
     };
 
     return kvm_vm_ioctl(kvm_state, KVM_CGM_SET_EPOCH_TOKEN, &data);
+}
+
+int cgs_mig_get_vcpu_state(CPUState *cpu)
+{
+    int ret;
+
+    struct kvm_cgm_data data = {
+        .uaddr = (uint64_t)cgs_data_channel.buf,
+        .size = 0,
+    };
+
+    ret = kvm_vcpu_ioctl(cpu, KVM_CGM_GET_VCPU_STATE, &data);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return (int)data.size;
+}
+
+int cgs_mig_set_vcpu_state(CPUState *cpu, uint32_t data_size)
+{
+    struct kvm_cgm_data data = {
+        .uaddr = (uint64_t)cgs_data_channel.buf,
+        .size = data_size,
+    };
+
+    return kvm_vcpu_ioctl(cpu, KVM_CGM_SET_VCPU_STATE, &data);
 }
