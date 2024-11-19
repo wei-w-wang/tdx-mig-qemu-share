@@ -59,6 +59,8 @@ struct ConfidentialGuestSupport {
      * so 'ready' is not set, we'll abort.
      */
     bool ready;
+
+    int (*migration_prepare)(bool is_src);
 };
 
 typedef struct ConfidentialGuestSupportClass {
