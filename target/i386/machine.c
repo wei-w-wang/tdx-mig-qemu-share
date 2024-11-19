@@ -3,6 +3,7 @@
 #include "exec/exec-all.h"
 #include "hw/isa/isa.h"
 #include "migration/cpu.h"
+#include "migration/cgs.h"
 #include "kvm/hyperv.h"
 #include "hw/i386/x86.h"
 #include "kvm/kvm_i386.h"
@@ -1605,6 +1606,64 @@ static const VMStateDescription vmstate_triple_fault = {
     }
 };
 
+static int cgs_state_save(QEMUFile *f, void *priv, size_t unused,
+                          const VMStateField *field, JSONWriter *vmdesc)
+{
+    X86CPU *cpu = priv;
+    int len;
+
+    len = cgs_mig_get_vcpu_state(CPU(cpu));
+    if (len < 0) {
+        return len;
+    }
+    qemu_put_be32(f, len);
+    qemu_put_buffer(f, cgs_data_channel.buf, len);
+
+    return 0;
+}
+
+static int cgs_state_load(QEMUFile *f, void *priv, size_t unused,
+                         const VMStateField *field)
+{
+    X86CPU *cpu = priv;
+    int len = qemu_get_be32(f);
+
+    qemu_get_buffer(f, cgs_data_channel.buf, len);
+
+    return cgs_mig_set_vcpu_state(CPU(cpu), len);
+}
+
+static const VMStateInfo vcpu_cgs_vmstate_info = {
+    .name = "cgs-vcpu",
+    .put  = cgs_state_save,
+    .get  = cgs_state_load,
+};
+
+static bool vcpu_cgs_state_needed(void *opaque)
+{
+    MachineState *ms = MACHINE(qdev_get_machine());
+
+    return !!ms->cgs;
+}
+
+static const VMStateDescription vmstate_vcpu_cgs_state = {
+    .name = "cpu/cgs-state",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .needed = vcpu_cgs_state_needed,
+    .fields = (const VMStateField[]) {
+        {
+            .name = "cgs-state",
+            .version_id = 0,
+            .size = 0,
+            .info = &vcpu_cgs_vmstate_info,
+            .flags = VMS_SINGLE,
+            .offset = 0,
+        },
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 const VMStateDescription vmstate_x86_cpu = {
     .name = "cpu",
     .version_id = 12,
@@ -1751,6 +1810,7 @@ const VMStateDescription vmstate_x86_cpu = {
 #endif
         &vmstate_arch_lbr,
         &vmstate_triple_fault,
+	&vmstate_vcpu_cgs_state,
         NULL
     }
 };
