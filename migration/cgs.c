@@ -104,3 +104,13 @@ int cgs_mig_get_epoch_token(void)
 
     return (int)data.size;
 }
+
+int cgs_mig_set_epoch_token(uint64_t data_size)
+{
+    struct kvm_cgm_data data = {
+        .uaddr = (uint64_t)cgs_data_channel.buf,
+        .size = data_size,
+    };
+
+    return kvm_vm_ioctl(kvm_state, KVM_CGM_SET_EPOCH_TOKEN, &data);
+}

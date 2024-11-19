@@ -4210,6 +4210,26 @@ static int parse_ramblocks(QEMUFile *f, ram_addr_t total_ram_bytes)
     return ret;
 }
 
+static int ram_handle_cgs_data(QEMUFile *f, uint32_t cgs_flags)
+{
+    int ret;
+    uint32_t cgs_data_size;
+
+    cgs_data_size = qemu_get_be32(f);
+    qemu_get_buffer(f, cgs_data_channel.buf, cgs_data_size);
+
+    switch (cgs_flags) {
+    case CGS_SAVE_FLAG_EPOCH_TOKEN:
+        ret = cgs_mig_set_epoch_token(cgs_data_size);
+        break;
+    default:
+         error_report("Unknown cgs flags: 0x%x", cgs_flags);
+         ret = -EINVAL;
+    }
+
+    return ret;
+}
+
 /**
  * ram_load_precopy: load pages in precopy case
  *
@@ -4234,6 +4254,7 @@ static int ram_load_precopy(QEMUFile *f)
     while (!ret && !(flags & RAM_SAVE_FLAG_EOS)) {
         ram_addr_t addr;
         void *host = NULL, *host_bak = NULL;
+        uint32_t cgs_flags;
         uint8_t ch;
 
         /*
@@ -4262,6 +4283,10 @@ static int ram_load_precopy(QEMUFile *f)
 
             ret = -EINVAL;
             break;
+        }
+
+        if (flags & RAM_SAVE_FLAG_CGS_STATE) {
+            cgs_flags = qemu_get_be32(f);
         }
 
         if (flags & (RAM_SAVE_FLAG_ZERO | RAM_SAVE_FLAG_PAGE |
@@ -4344,6 +4369,9 @@ static int ram_load_precopy(QEMUFile *f)
             break;
         case RAM_SAVE_FLAG_MULTIFD_FLUSH:
             multifd_recv_sync_main();
+            break;
+        case RAM_SAVE_FLAG_CGS_STATE:
+            ret = ram_handle_cgs_data(f, cgs_flags);
             break;
         case RAM_SAVE_FLAG_EOS:
             /* normal exit */
