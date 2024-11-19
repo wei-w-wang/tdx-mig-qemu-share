@@ -2872,7 +2872,6 @@ void qemu_loadvm_state_cleanup(void)
     SaveStateEntry *se;
 
     trace_loadvm_state_cleanup();
-    cgs_mig_session_end(false);
 
     QTAILQ_FOREACH(se, &savevm_state.handlers, entry) {
         if (se->ops && se->ops->load_cleanup) {
@@ -3106,6 +3105,7 @@ int qemu_loadvm_state(QEMUFile *f)
         }
     }
 
+    cgs_mig_session_end(!!ret);
     cpu_synchronize_all_post_init();
 
     return ret;
