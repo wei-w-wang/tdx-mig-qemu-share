@@ -359,14 +359,61 @@ static int tdx_migration_state_notifier(NotifierWithReturn *notifier,
     return 0;
 }
 
+static int tdx_migration_do_prepare(bool is_src)
+{
+    char pgrep_cmd[32] = {0};
+    char migtd_pid_str[32] = {0};
+    pid_t migtd_pid;
+    struct kvm_cgm_prepare prepare;
+    int ret;
+    FILE *cmd_pipe;
+
+    sprintf(pgrep_cmd, "pgrep migtd-%d", kvm_get_vm_pid());
+    cmd_pipe = popen(pgrep_cmd, "r");
+
+    fgets(migtd_pid_str, 32, cmd_pipe);
+    migtd_pid = atoi(migtd_pid_str);
+    ret = pclose(cmd_pipe);
+    if (ret < 0) {
+        error_report("migration prepare: pclose failed %s", strerror(-ret));
+        return -EACCES;
+    }
+
+    prepare.is_src = is_src;
+    prepare.vmid.type = KVM_VM_ID_TYPE_PID;
+    prepare.vmid.pid = migtd_pid;
+
+    return kvm_vm_ioctl(kvm_state, KVM_CGM_PREPARE, &prepare);
+}
+
+static int tdx_migration_prepare(bool is_src)
+{
+    int ret, max_tries = 10;
+
+    do {
+        ret = tdx_migration_do_prepare(is_src);
+        if (ret == -ENOENT) {
+            usleep(10000);
+        }
+    } while (ret == -ENOENT && max_tries--);
+
+    if (ret < 0) {
+        error_report("migration prepare uAPI failed %s", strerror(-ret));
+    }
+
+    return ret;
+}
+
 static void tdx_finalize_vm(Notifier *notifier, void *unused)
 {
+    struct ConfidentialGuestSupport *cgs = CONFIDENTIAL_GUEST_SUPPORT(tdx_guest);
     TdxFirmware *tdvf = &tdx_guest->tdvf;
     TdxFirmwareEntry *entry;
     RAMBlock *ram_block;
     int r;
 
     if (tdx_guest->attributes & TDX_TD_ATTRIBUTES_MIG) {
+        cgs->migration_prepare = tdx_migration_prepare;
         migration_add_notifier(&tdx_guest->migration_state_notifier,
                                tdx_migration_state_notifier);
     }
@@ -461,7 +508,7 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         error_report("KVM_TDX_FINALIZE_VM failed %s", strerror(-r));
         exit(0);
     }
-    CONFIDENTIAL_GUEST_SUPPORT(tdx_guest)->ready = true;
+    cgs->ready = true;
 }
 
 static Notifier tdx_machine_done_notify = {
