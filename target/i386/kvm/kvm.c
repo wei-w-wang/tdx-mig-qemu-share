@@ -5182,6 +5182,10 @@ static int kvm_put_debugregs(X86CPU *cpu)
     struct kvm_debugregs dbgregs;
     int i;
 
+    if (is_tdx_vm()) {
+        return 0;
+    }
+
     memset(&dbgregs, 0, sizeof(dbgregs));
     for (i = 0; i < 4; i++) {
         dbgregs.db[i] = env->dr[i];
@@ -5198,6 +5202,10 @@ static int kvm_get_debugregs(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     struct kvm_debugregs dbgregs;
     int i, ret;
+
+    if (is_tdx_vm()) {
+        return 0;
+    }
 
     ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_DEBUGREGS, &dbgregs);
     if (ret < 0) {
