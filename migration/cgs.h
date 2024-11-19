@@ -29,4 +29,6 @@ int cgs_mig_get_vcpu_state(CPUState *cpu);
 
 int cgs_mig_set_vcpu_state(CPUState *cpu, uint32_t data_size);
 
+int cgs_mig_session_end(long abort);
+
 #endif

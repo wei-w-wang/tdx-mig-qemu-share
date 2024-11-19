@@ -153,3 +153,8 @@ int cgs_mig_set_vcpu_state(CPUState *cpu, uint32_t data_size)
 
     return kvm_vcpu_ioctl(cpu, KVM_CGM_SET_VCPU_STATE, &data);
 }
+
+int cgs_mig_session_end(long abort)
+{
+    return kvm_vm_ioctl(kvm_state, KVM_CGM_SESSION_END, &abort);
+}
