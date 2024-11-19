@@ -19,6 +19,8 @@ int cgs_mig_start(int data_size);
 
 int cgs_mig_get_memory_state(hwaddr cgs_private_gpa, uint16_t gfn_num);
 
+int cgs_mig_set_memory_state(uint64_t data_size, hwaddr gfn, uint16_t gfn_num);
+
 int cgs_mig_get_epoch_token(void);
 
 int cgs_mig_set_epoch_token(uint64_t data_size);
