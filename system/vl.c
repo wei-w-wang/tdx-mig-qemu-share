@@ -2692,7 +2692,8 @@ static bool qemu_machine_creation_done(Error **errp)
 
     qdev_machine_creation_done();
 
-    if (machine->cgs && !machine->cgs->ready) {
+    if (!runstate_check(RUN_STATE_INMIGRATE) &&
+        machine->cgs && !machine->cgs->ready) {
         error_setg(errp, "accelerator does not support confidential guest %s",
                    object_get_typename(OBJECT(machine->cgs)));
         exit(1);
