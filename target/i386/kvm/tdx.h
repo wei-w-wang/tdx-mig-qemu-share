@@ -47,6 +47,8 @@ typedef struct TdxGuest {
 
     uint32_t nr_ram_entries;
     TdxRamEntry *ram_entries;
+
+    char *migtd_setup_path;
 } TdxGuest;
 
 #ifdef CONFIG_TDX

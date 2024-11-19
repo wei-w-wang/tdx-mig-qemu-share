@@ -41,6 +41,7 @@
 
 #define TDX_TD_ATTRIBUTES_DEBUG             BIT_ULL(0)
 #define TDX_TD_ATTRIBUTES_SEPT_VE_DISABLE   BIT_ULL(28)
+#define TDX_TD_ATTRIBUTES_MIG               BIT_ULL(29)
 #define TDX_TD_ATTRIBUTES_PKS               BIT_ULL(30)
 #define TDX_TD_ATTRIBUTES_PERFMON           BIT_ULL(63)
 
@@ -1106,6 +1107,29 @@ static void tdx_guest_set_mrownerconfig(Object *obj, const char *value, Error **
     tdx->mrownerconfig = g_strdup(value);
 }
 
+static char *tdx_guest_get_migtd_setup(Object *obj, Error **errp)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+
+    return g_strdup(tdx->migtd_setup_path);
+}
+
+static void tdx_guest_set_migtd_setup(Object *obj, const char *value,
+                                      Error **errp)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+
+    if (tdx->initialized) {
+        error_report("migtd setup script failed to set");
+	return;
+    }
+
+    g_free(tdx->migtd_setup_path);
+    tdx->migtd_setup_path = g_strdup(value);
+
+    tdx->attributes |= TDX_TD_ATTRIBUTES_MIG;
+}
+
 /* tdx guest */
 OBJECT_DEFINE_TYPE_WITH_INTERFACES(TdxGuest,
                                    tdx_guest,
@@ -1137,6 +1161,8 @@ static void tdx_guest_init(Object *obj)
     object_property_add_str(obj, "mrownerconfig",
                             tdx_guest_get_mrownerconfig,
                             tdx_guest_set_mrownerconfig);
+    object_property_add_str(obj, "migtd-setup", tdx_guest_get_migtd_setup,
+                            tdx_guest_set_migtd_setup);
 }
 
 static void tdx_guest_finalize(Object *obj)
