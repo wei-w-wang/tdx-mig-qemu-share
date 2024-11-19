@@ -49,6 +49,7 @@
 #include "sysemu/dirtylimit.h"
 #include "qemu/range.h"
 #include "sysemu/guest-memfd-manager.h"
+#include "exec/confidential-guest-support.h"
 
 #include "hw/boards.h"
 #include "sysemu/stats.h"
@@ -2878,9 +2879,22 @@ void kvm_flush_coalesced_mmio_buffer(void)
     s->coalesced_flush_in_progress = false;
 }
 
+static bool kvm_cpu_synchronize_state_allowed(void)
+{
+    ConfidentialGuestSupport *cgs = current_machine->cgs;
+
+    if (!kvm_state->guest_state_protected)
+        return true;
+
+    if (cgs && cgs->migration_prepare)
+	return true;
+
+    return false;
+}
+
 static void do_kvm_cpu_synchronize_state(CPUState *cpu, run_on_cpu_data arg)
 {
-    if (!cpu->vcpu_dirty && !kvm_state->guest_state_protected) {
+    if (!cpu->vcpu_dirty && kvm_cpu_synchronize_state_allowed()) {
         Error *err = NULL;
         int ret = kvm_arch_get_registers(cpu, &err);
         if (ret) {
@@ -2900,7 +2914,7 @@ static void do_kvm_cpu_synchronize_state(CPUState *cpu, run_on_cpu_data arg)
 
 void kvm_cpu_synchronize_state(CPUState *cpu)
 {
-    if (!cpu->vcpu_dirty && !kvm_state->guest_state_protected) {
+    if (!cpu->vcpu_dirty && kvm_cpu_synchronize_state_allowed()) {
         run_on_cpu(cpu, do_kvm_cpu_synchronize_state, RUN_ON_CPU_NULL);
     }
 }
@@ -2947,7 +2961,7 @@ static void do_kvm_cpu_synchronize_post_init(CPUState *cpu, run_on_cpu_data arg)
 
 void kvm_cpu_synchronize_post_init(CPUState *cpu)
 {
-    if (!kvm_state->guest_state_protected) {
+    if (kvm_cpu_synchronize_state_allowed()) {
         /*
          * This runs before the machine_init_done notifiers, and is the last
          * opportunity to synchronize the state of confidential guests.
