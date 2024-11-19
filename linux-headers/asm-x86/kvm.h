@@ -975,9 +975,10 @@ struct kvm_tdx_init_vm {
 	__u64 mrconfigid[6];	/* sha384 digest */
 	__u64 mrowner[6];	/* sha384 digest */
 	__u64 mrownerconfig[6];	/* sha384 digest */
+	__u64 migtd_hash[6];    /* sha384 digest */
 
 	/* The total space for TD_PARAMS before the CPUIDs is 256 bytes */
-	__u64 reserved[12];
+	__u64 reserved[6];
 
 	/*
 	 * Call KVM_TDX_INIT_VM before vcpu creation, thus before
