@@ -42,6 +42,7 @@ extern bool kvm_gsi_routing_allowed;
 extern bool kvm_gsi_direct_mapping;
 extern bool kvm_readonly_mem_allowed;
 extern bool kvm_msi_use_devid;
+extern bool kvm_gmem_default_shared;
 
 #define kvm_enabled()           (kvm_allowed)
 /**
@@ -578,6 +579,6 @@ int kvm_create_guest_memfd(uint64_t size, uint64_t flags, Error **errp);
 int kvm_set_memory_attributes_private(hwaddr start, uint64_t size);
 int kvm_set_memory_attributes_shared(hwaddr start, uint64_t size);
 
-int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private);
+int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private, bool need_discard);
 
 #endif

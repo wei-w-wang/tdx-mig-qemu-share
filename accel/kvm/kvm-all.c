@@ -94,6 +94,8 @@ bool kvm_allowed;
 bool kvm_readonly_mem_allowed;
 bool kvm_vm_attributes_allowed;
 bool kvm_msi_use_devid;
+bool kvm_gmem_default_shared;
+
 static bool kvm_has_guest_debug;
 static int kvm_sstep_flags;
 static bool kvm_immediate_exit;
@@ -1568,7 +1570,7 @@ static void kvm_set_phys_mem(KVMMemoryListener *kml,
             abort();
         }
 
-        if (memory_region_has_guest_memfd(mr)) {
+        if (memory_region_has_guest_memfd(mr) && !kvm_gmem_default_shared) {
             err = kvm_set_memory_attributes_private(start_addr, slot_size);
             if (err) {
                 error_report("%s: failed to set memory attribute private: %s",
@@ -3019,7 +3021,7 @@ static void kvm_eat_signals(CPUState *cpu)
     } while (sigismember(&chkset, SIG_IPI));
 }
 
-int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private)
+int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private, bool need_discard)
 {
     MemoryRegionSection section;
     ram_addr_t offset;
@@ -3095,6 +3097,10 @@ int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private)
     gmm = GUEST_MEMFD_MANAGER(mr->rdm);
     if (gmm) {
         guest_memfd_state_change(gmm, offset, size, to_private);
+    }
+
+    if (!need_discard) {
+        goto out_unref;
     }
 
     if (to_private) {
@@ -3295,7 +3301,7 @@ int kvm_cpu_exec(CPUState *cpu)
                 break;
             }
             ret = kvm_convert_memory(run->memory_fault.gpa, run->memory_fault.size,
-                                     run->memory_fault.flags & KVM_MEMORY_EXIT_FLAG_PRIVATE);
+                                     run->memory_fault.flags & KVM_MEMORY_EXIT_FLAG_PRIVATE, true);
             break;
         default:
             ret = kvm_arch_handle_exit(cpu, run);
