@@ -29,4 +29,6 @@ void socket_start_outgoing_migration(MigrationState *s,
                                      SocketAddress *saddr, Error **errp);
 void socket_cleanup_outgoing_migration(void);
 
+SocketAddress *socket_get_outgoing_addr(void);
+
 #endif

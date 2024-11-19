@@ -101,6 +101,8 @@ static uint64_t kvm_supported_memory_attributes;
 static bool kvm_guest_memfd_supported;
 static hwaddr kvm_max_slot_size = ~0;
 
+static pid_t kvm_vm_pid;
+
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
     KVM_CAP_INFO(DESTROY_MEMORY_REGION_WORKS),
@@ -220,6 +222,11 @@ static bool kvm_slots_grow(KVMMemoryListener *kml, unsigned int nr_slots_new)
 static bool kvm_slots_double(KVMMemoryListener *kml)
 {
     return kvm_slots_grow(kml, kml->nr_slots_allocated * 2);
+}
+
+pid_t kvm_get_vm_pid(void)
+{
+    return kvm_vm_pid;
 }
 
 unsigned int kvm_get_max_memslots(void)
@@ -2777,6 +2784,7 @@ static int kvm_init(MachineState *ms)
                             query_stats_schemas_cb);
     }
 
+    kvm_vm_pid = getpid();
     return 0;
 
 err:
@@ -3254,6 +3262,7 @@ int kvm_cpu_exec(CPUState *cpu)
             trace_kvm_run_exit_system_event(cpu->cpu_index, run->system_event.type);
             switch (run->system_event.type) {
             case KVM_SYSTEM_EVENT_SHUTDOWN:
+                qemu_log("%s: KVM_SYSTEM_EVENT_SHUTDOWN\n", __func__);
                 qemu_system_shutdown_request(SHUTDOWN_CAUSE_GUEST_SHUTDOWN);
                 ret = EXCP_INTERRUPT;
                 break;

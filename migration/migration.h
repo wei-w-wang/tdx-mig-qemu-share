@@ -556,4 +556,6 @@ void migration_bitmap_sync_precopy(bool last_stage);
 /* migration/block-dirty-bitmap.c */
 void dirty_bitmap_mig_init(void);
 
+int migration_get_socket_addr(SocketAddress *buf);
+
 #endif

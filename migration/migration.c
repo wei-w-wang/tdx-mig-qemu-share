@@ -719,6 +719,9 @@ static void qemu_start_incoming_migration(const char *uri, bool has_channels,
     } else {
         error_setg(errp, "unknown migration protocol: %s", uri);
     }
+
+    migration_call_notifiers(migrate_get_current(),
+                             MIG_EVENT_PRECOPY_SETUP, errp);
 }
 
 static void process_incoming_migration_bh(void *opaque)
@@ -2030,6 +2033,29 @@ static bool migrate_prepare(MigrationState *s, bool resume, Error **errp)
     }
 
     return true;
+}
+
+int migration_get_socket_addr(SocketAddress *buf)
+{
+    MigrationIncomingState *mis = migration_incoming_get_current();
+    SocketAddress *saddr;
+
+    if (runstate_check(RUN_STATE_INMIGRATE)) {
+        saddr = mis->socket_address_list->value;
+    } else {
+        saddr = socket_get_outgoing_addr();
+    }
+
+    if (!saddr ||
+        (saddr->type != SOCKET_ADDRESS_TYPE_INET &&
+         saddr->type != SOCKET_ADDRESS_TYPE_UNIX &&
+         saddr->type != SOCKET_ADDRESS_TYPE_VSOCK)) {
+        return -EINVAL;
+    }
+
+    memcpy(buf, saddr, sizeof(SocketAddress));
+
+    return 0;
 }
 
 void qmp_migrate(const char *uri, bool has_channels,

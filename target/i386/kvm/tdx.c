@@ -33,6 +33,8 @@
 #include "hw/i386/tdvf-hob.h"
 #include "kvm_i386.h"
 #include "tdx.h"
+#include "migration/migration.h"
+#include "migration/misc.h"
 
 #include "standard-headers/asm-x86/kvm_para.h"
 
@@ -304,12 +306,70 @@ static void tdx_post_init_vcpus(void)
     }
 }
 
+static void tdx_run_migtd(char *uri)
+{
+    char migtd_name[17] = {0};
+    char *args[4];
+
+    sprintf(migtd_name, "migtd-%d", kvm_get_vm_pid());
+
+    args[0] = tdx_guest->migtd_setup_path;
+    args[1] = migtd_name;
+    args[2] = uri;
+    args[3] = NULL;
+    execv(tdx_guest->migtd_setup_path, args);
+    _exit(EXIT_SUCCESS);
+}
+
+static void child_cleanup(int sig)
+{
+    int status;
+
+    RETRY_ON_EINTR(waitpid(-1, &status, 0));
+    if (!WIFEXITED(status) || WEXITSTATUS(status)) {
+        error_report("The MigTD process terminated abnormally");
+    }
+}
+
+static void tdx_launch_migration_assistant(Error **errp)
+{
+    pid_t pid;
+    SocketAddress saddr;
+
+    signal(SIGCHLD, child_cleanup);
+    migration_get_socket_addr(&saddr);
+
+    pid = fork();
+    if (pid < 0) {
+        error_setg(errp, "Failed to fork for MigTD");
+    }
+
+    if (!pid) {
+        tdx_run_migtd(saddr.u.inet.host);
+    }
+}
+
+static int tdx_migration_state_notifier(NotifierWithReturn *notifier,
+                                        MigrationEvent *e, Error **errp)
+{
+    if (e->type == MIG_EVENT_PRECOPY_SETUP) {
+        tdx_launch_migration_assistant(errp);
+    }
+
+    return 0;
+}
+
 static void tdx_finalize_vm(Notifier *notifier, void *unused)
 {
     TdxFirmware *tdvf = &tdx_guest->tdvf;
     TdxFirmwareEntry *entry;
     RAMBlock *ram_block;
     int r;
+
+    if (tdx_guest->attributes & TDX_TD_ATTRIBUTES_MIG) {
+        migration_add_notifier(&tdx_guest->migration_state_notifier,
+                               tdx_migration_state_notifier);
+    }
 
     tdx_init_ram_entries();
 
