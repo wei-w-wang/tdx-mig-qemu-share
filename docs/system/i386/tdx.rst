@@ -74,7 +74,7 @@ supported by it, via propertyies of "tdx-guest" object.
 E.g., "sept-ve-disable" (bit 63).
 
 MSR based features
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Current KVM doesn't support MSR based feature (e.g., MSR_IA32_ARCH_CAPABILITIES)
 configuration for TDX, and it's a future work to enable it in QEMU when KVM adds
