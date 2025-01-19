@@ -36,6 +36,10 @@
 #include "tdx-quote-generator.h"
 #include "../cpu-internal.h"
 
+#define SHA384_DIGEST_SIZE  48
+#define MIGTD_HASH_STRING_OFFSET 12
+#define MIGTD_HASH_STRING_LEN 128
+
 #define TDX_SUPPORTED_KVM_FEATURES  ((1U << KVM_FEATURE_NOP_IO_DELAY) | \
                                      (1U << KVM_FEATURE_PV_UNHALT) | \
                                      (1U << KVM_FEATURE_PV_TLB_FLUSH) | \
@@ -822,6 +826,56 @@ static int setup_td_guest_attributes(X86CPU *x86cpu, Error **errp)
     return tdx_validate_attributes(tdx_guest, errp);
 }
 
+static int tdx_prebind_migtd(void *migtd_hash, Error **errp)
+{
+    FILE *fp;
+    char *line = NULL;
+    size_t len = 0;
+    /* Base64 data needs to be NULL terminated, so add 1 more byte */
+    char string[MIGTD_HASH_STRING_LEN + 1] = {0};
+    g_autofree uint8_t *data;
+    bool found = false;
+    int i, ret = 0;
+
+    fp = fopen(tdx_guest->migtd_setup_path, "r");
+    if (!fp) {
+        printf("failed to read the file\n");
+    }
+
+    while (getline(&line, &len, fp) != -1) {
+        if (strstr(line, "MIGTD_HASH=")) {
+            memcpy(string, line + MIGTD_HASH_STRING_OFFSET,
+                   MIGTD_HASH_STRING_LEN);
+	    found = true;
+            break;
+        }
+    }
+    if (!found) {
+        error_setg(errp, "TDX: failed to find migtd hash in the setup script");
+        ret = -1;
+        goto out;
+    }
+
+    data = qbase64_decode(string, MIGTD_HASH_STRING_LEN , &len, errp);
+    if (!data || len != SHA384_DIGEST_SIZE * 2) {
+        error_setg(errp, "TDX: failed to decode migtd hash");
+        ret = -1;
+        goto out;
+    }
+
+    for (i = 0; i < SHA384_DIGEST_SIZE; i++) {
+         if (sscanf((char *)data + i * 2, "%02hhx", (char *)migtd_hash + i) != 1) {
+            error_setg(errp, "invalid format for migtd hash %s", string);
+            ret = -1;
+            goto out;
+        }
+    }
+
+out:
+    fclose(fp);
+    return ret;
+}
+
 int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
 {
     MachineState *ms = MACHINE(qdev_get_machine());
@@ -841,8 +895,6 @@ int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
 
     init_vm = g_malloc0(sizeof(struct kvm_tdx_init_vm) +
                         sizeof(struct kvm_cpuid_entry2) * KVM_MAX_CPUID_ENTRIES);
-
-#define SHA384_DIGEST_SIZE  48
 
     if (tdx_guest->mrconfigid) {
         g_autofree uint8_t *data = qbase64_decode(tdx_guest->mrconfigid,
@@ -872,6 +924,11 @@ int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
             return -1;
         }
         memcpy(init_vm->mrownerconfig, data, data_len);
+    }
+
+    if ((tdx_guest->attributes & TDX_TD_ATTRIBUTES_MIG) &&
+        tdx_prebind_migtd((void *)init_vm->migtd_hash, errp)) {
+        return -1;
     }
 
     r = kvm_vm_enable_cap(kvm_state, KVM_CAP_MAX_VCPUS, 0, ms->smp.cpus);
