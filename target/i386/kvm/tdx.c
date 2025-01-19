@@ -506,10 +506,8 @@ static void tdx_add_ram_entry(uint64_t address, uint64_t length,
     tdx_guest->nr_ram_entries++;
 }
 
-static int tdx_accept_ram_range(uint64_t address, uint64_t length)
+static TdxRamEntry *tdx_find_ram_range(uint64_t address, uint64_t length)
 {
-    uint64_t head_start, tail_start, head_length, tail_length;
-    uint64_t tmp_address, tmp_length;
     TdxRamEntry *e;
     int i;
 
@@ -527,18 +525,32 @@ static int tdx_accept_ram_range(uint64_t address, uint64_t length)
          */
         if (e->address > address ||
             e->address + e->length < address + length) {
-            return -EINVAL;
+            return NULL;
         }
 
         if (e->type == TDX_RAM_ADDED) {
-            return -EINVAL;
+            return NULL;
         }
 
         break;
     }
 
     if (i == tdx_guest->nr_ram_entries) {
-        return -1;
+        return NULL;
+    }
+
+    return e;
+}
+
+static int tdx_accept_ram_range(uint64_t address, uint64_t length)
+{
+    uint64_t head_start, tail_start, head_length, tail_length;
+    uint64_t tmp_address, tmp_length;
+    TdxRamEntry *e;
+
+    e = tdx_find_ram_range(address, length);
+    if (!e) {
+        return -EINVAL;
     }
 
     tmp_address = e->address;
@@ -639,6 +651,14 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
                                            qemu_real_host_page_size(), 0, 0);
             tdx_accept_ram_range(entry->address, entry->size);
             break;
+        /* PERM_MEM is allocated and added later via PAGE.AUG */
+        case TDVF_SECTION_TYPE_PERM_MEM:
+            if (!tdx_find_ram_range(entry->address, entry->size)) {
+                error_report("Failed to reserve ram for TDVF section %d",
+                             entry->type);
+                exit(1);
+            }
+            break;
         default:
             error_report("Unsupported TDVF section %d", entry->type);
             exit(1);
@@ -662,6 +682,10 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         do {
             r = kvm_vcpu_ioctl(first_cpu, KVM_MEMORY_MAPPING, &mapping);
         } while (r == -EAGAIN);
+
+        if (entry->type == TDVF_SECTION_TYPE_PERM_MEM) {
+            continue;
+        }
 
         if (r < 0) {
              error_report("KVM_MEMORY_MAPPING failed %s", strerror(-r));
