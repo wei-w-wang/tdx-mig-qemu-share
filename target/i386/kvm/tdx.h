@@ -63,6 +63,8 @@ typedef struct TdxGuest {
 
     /* GetQuote */
     TdxQuoteGenerator *quote_generator;
+
+    char *migtd_setup_path;
 } TdxGuest;
 
 #ifdef CONFIG_TDX
