@@ -65,6 +65,7 @@ typedef struct TdxGuest {
     TdxQuoteGenerator *quote_generator;
 
     char *migtd_setup_path;
+    Notifier migration_state_notifier;
 } TdxGuest;
 
 #ifdef CONFIG_TDX

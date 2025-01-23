@@ -35,6 +35,8 @@
 #include "tdx.h"
 #include "tdx-quote-generator.h"
 #include "../cpu-internal.h"
+#include "migration/migration.h"
+#include "migration/misc.h"
 
 #define SHA384_DIGEST_SIZE  48
 #define MIGTD_HASH_STRING_OFFSET 12
@@ -635,12 +637,70 @@ static void tdx_post_init_vcpus(void)
     }
 }
 
+static void tdx_run_migtd(char *uri)
+{
+    char migtd_name[17] = {0};
+    char *args[4];
+
+    sprintf(migtd_name, "migtd-%d", kvm_get_vm_pid());
+
+    args[0] = tdx_guest->migtd_setup_path;
+    args[1] = migtd_name;
+    args[2] = uri;
+    args[3] = NULL;
+    execv(tdx_guest->migtd_setup_path, args);
+    _exit(EXIT_SUCCESS);
+}
+
+static void child_cleanup(int sig)
+{
+    int status;
+
+    RETRY_ON_EINTR(waitpid(-1, &status, 0));
+    if (!WIFEXITED(status) || WEXITSTATUS(status)) {
+        error_report("The MigTD process terminated abnormally");
+    }
+}
+
+static void tdx_launch_migration_assistant(void)
+{
+    pid_t pid;
+    SocketAddress saddr;
+
+    signal(SIGCHLD, child_cleanup);
+    migration_get_socket_addr(&saddr);
+
+    pid = fork();
+    if (pid < 0) {
+        error_report("Failed to fork for MigTD");
+    }
+
+    if (!pid) {
+        tdx_run_migtd(saddr.u.inet.host);
+    }
+}
+
+static void tdx_migration_state_notifier(Notifier *notifier, void *data)
+{
+    bool is_src = !runstate_check(RUN_STATE_INMIGRATE);
+    int state = is_src ? ((MigrationState *)data)->state :
+                         ((MigrationIncomingState *)data)->state;
+
+    if (state == MIGRATION_STATUS_SETUP)
+        tdx_launch_migration_assistant();
+}
+
 static void tdx_finalize_vm(Notifier *notifier, void *unused)
 {
     TdxFirmware *tdvf = &tdx_guest->tdvf;
     TdxFirmwareEntry *entry;
     RAMBlock *ram_block;
     int r;
+
+    if (tdx_guest->attributes & TDX_TD_ATTRIBUTES_MIG) {
+        migration_add_notifier(&tdx_guest->migration_state_notifier,
+                               tdx_migration_state_notifier);
+    }
 
     tdx_init_ram_entries();
 

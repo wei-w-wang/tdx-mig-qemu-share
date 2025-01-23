@@ -545,4 +545,6 @@ void migration_rp_kick(MigrationState *s);
 
 int migration_stop_vm(RunState state);
 
+int migration_get_socket_addr(SocketAddress *buf);
+
 #endif
