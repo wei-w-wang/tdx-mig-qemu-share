@@ -37,6 +37,7 @@
 #include "../cpu-internal.h"
 #include "migration/migration.h"
 #include "migration/misc.h"
+#include "migration/cgs.h"
 
 #define SHA384_DIGEST_SIZE  48
 #define MIGTD_HASH_STRING_OFFSET 12
