@@ -70,5 +70,6 @@ int qemu_loadvm_approve_switchover(void);
 int qemu_savevm_state_complete_precopy_non_iterable(QEMUFile *f,
         bool in_postcopy, bool inactivate_disks);
 int qemu_savevm_send_cgs_mig_prepare(QEMUFile *f);
+int qemu_savevm_send_cgs_mig_start_data(QEMUFile *f);
 
 #endif

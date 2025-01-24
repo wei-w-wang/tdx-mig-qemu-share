@@ -53,3 +53,19 @@ void cgs_mig_cleanup(void)
 
     g_free(cgs_data_channel.buf);
 }
+
+int cgs_mig_start(void)
+{
+    struct kvm_cgm_data data = {
+        .uaddr = (uint64_t)cgs_data_channel.buf,
+        .size = cgs_data_channel.buf_size,
+    };
+    int ret;
+
+    ret = kvm_vm_ioctl(kvm_state, KVM_CGM_START, &data);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return (int)data.size;
+}
