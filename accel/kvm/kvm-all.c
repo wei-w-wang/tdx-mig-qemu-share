@@ -2990,6 +2990,8 @@ int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private)
 
         addr = memory_region_get_ram_ptr(mr) + section.offset_within_region;
         rb = qemu_ram_block_from_host(addr, false, &offset);
+    
+        ram_block_update_cgs_bmap(rb, offset, size, to_private);
 
         memory_region_convert_mem_attr(&section, !to_private);
 
