@@ -65,6 +65,8 @@
 #
 # @cgs-private-pages: number of private pages sent (since 8.2)
 #
+# @cgs-epochs: confidential guest migration epochs (since 8.2)
+#
 # Features:
 #
 # @deprecated: Member @skipped is always zero since 1.5.3
@@ -84,7 +86,8 @@
            'precopy-bytes': 'uint64', 'downtime-bytes': 'uint64',
            'postcopy-bytes': 'uint64',
            'dirty-sync-missed-zero-copy': 'uint64',
-           'cgs-private-pages': 'uint64' } }
+           'cgs-private-pages': 'uint64',
+           'cgs-epochs' : 'uint64' } }
 
 ##
 # @XBZRLECacheStats:
