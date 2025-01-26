@@ -2883,6 +2883,10 @@ static int kvm_put_xsave(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     void *xsave = env->xsave_buf;
 
+    if (is_tdx_vm()) {
+        return 0;
+    }
+
     x86_cpu_xsave_all_areas(cpu, xsave, env->xsave_buf_len);
 
     return kvm_vcpu_ioctl(CPU(cpu), KVM_SET_XSAVE, xsave);
@@ -3639,6 +3643,10 @@ static int kvm_get_xsave(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     void *xsave = env->xsave_buf;
     int type, ret;
+
+    if (is_tdx_vm()) {
+        return 0;
+    }
 
     type = has_xsave2 ? KVM_GET_XSAVE2 : KVM_GET_XSAVE;
     ret = kvm_vcpu_ioctl(CPU(cpu), type, xsave);
