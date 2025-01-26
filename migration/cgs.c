@@ -69,3 +69,20 @@ int cgs_mig_start(int data_size)
 
     return (int)data.size;
 }
+
+int cgs_mig_get_memory_state(hwaddr cgs_private_gpa, uint16_t gfn_num)
+{
+    struct kvm_cgm_memory_state state = { 0 };
+    hwaddr gfn = cgs_private_gpa >> TARGET_PAGE_BITS;
+    int ret;
+
+    state.gfns_uaddr = (unsigned long)&gfn;
+    state.gfn_num = gfn_num;
+    state.data.uaddr = (unsigned long)cgs_data_channel.buf;
+    ret = kvm_vm_ioctl(kvm_state, KVM_CGM_GET_MEMORY_STATE, &state);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return state.data.size;
+}
