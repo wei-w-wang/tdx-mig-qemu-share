@@ -4479,8 +4479,27 @@ static void ram_mig_ram_block_resized(RAMBlockNotifier *n, void *host,
     }
 }
 
+static void ram_mig_ram_block_convert_memory(void)
+{
+    Error *err = NULL;
+    MigrationState *s = migrate_get_current();
+
+    if (!s || !migration_is_active(s)) {
+        return;
+    }
+
+    error_setg(&err, "Cancel migration as memory convert occured.");
+    migration_cancel(err);
+    error_free(err);
+
+    while (s->state == MIGRATION_STATUS_CANCELLING) {
+        usleep(10000);
+    }
+}
+
 static RAMBlockNotifier ram_mig_ram_notifier = {
     .ram_block_resized = ram_mig_ram_block_resized,
+    .convert_memory = ram_mig_ram_block_convert_memory,
 };
 
 void ram_mig_init(void)

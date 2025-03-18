@@ -2981,6 +2981,7 @@ int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private, bool need_dis
         if (to_private) {
             ret = kvm_set_memory_attributes_private(start, size);
         } else {
+            ram_block_notify_convert_memory();
             ret = kvm_set_memory_attributes_shared(start, size);
         }
 
