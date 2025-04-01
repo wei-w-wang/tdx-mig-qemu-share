@@ -29,6 +29,7 @@
 #include "ram.h"
 #include "options.h"
 #include "sysemu/kvm.h"
+#include "include/hw/boards.h"
 
 /* Maximum migrate downtime set to 2000 seconds */
 #define MAX_MIGRATE_DOWNTIME_SECONDS 2000
@@ -501,6 +502,11 @@ bool migrate_caps_check(bool *old_caps, bool *new_caps, Error **errp)
 #endif
 
     if (new_caps[MIGRATION_CAPABILITY_POSTCOPY_RAM]) {
+        if (current_machine->cgs) {
+            error_setg(errp, "Confidential guest doesn't support Postcopy yet");
+            return false;
+        }
+
         /* This check is reasonably expensive, so only when it's being
          * set the first time, also it's only the destination that needs
          * special support.
@@ -600,6 +606,10 @@ bool migrate_caps_check(bool *old_caps, bool *new_caps, Error **errp)
     }
 
     if (new_caps[MIGRATION_CAPABILITY_MULTIFD]) {
+        if (current_machine->cgs) {
+            error_setg(errp, "Confidential guest doesn't support Multifd yet");
+            return false;
+        }
         if (new_caps[MIGRATION_CAPABILITY_COMPRESS]) {
             error_setg(errp, "Multifd is not compatible with compress");
             return false;
