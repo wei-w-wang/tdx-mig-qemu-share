@@ -708,11 +708,8 @@ static hwaddr ram_get_private_gpa(RAMBlock *rb, unsigned long page)
         memory_region_is_rom(rb->mr) ||
         !memory_region_is_ram(rb->mr) ||
         !rb->cgs_bmap ||
+        offset >= rb->used_length ||
         !test_bit(page, rb->cgs_bmap)) {
-        return CGS_PRIVATE_GPA_INVALID;
-    }
-
-    if (offset >= rb->used_length) {
         return CGS_PRIVATE_GPA_INVALID;
     }
 
